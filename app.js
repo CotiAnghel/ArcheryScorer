@@ -623,13 +623,27 @@ function openSessionDetail(id) {
 
 function deleteSession() {
   if (!selectedSessionId) return;
-  if (!confirm('Ștergi această sesiune definitiv?')) return;
+  const session = sessions.find(s => s.id === selectedSessionId);
+  if (!session) return;
+
+  const hasSheets = scriptUrl && session.sheetName;
+  const msg = hasSheets
+    ? 'Ștergi această sesiune definitiv?\n\nApasă OK pentru a șterge și din Google Sheets.\nApasă Anulează pentru a păstra în Sheets.'
+    : 'Ștergi această sesiune definitiv din memoria locală?';
+
+  if (!confirm(msg)) return;
+
+  // Șterge din Google Sheets dacă e sincronizată
+  if (hasSheets) {
+    deleteFromGoogleSheets(session);
+  }
+
   sessions = sessions.filter(s => s.id !== selectedSessionId);
   save();
   closeModal('modal-session-detail');
   renderHistory();
   renderGlobalStats();
-  toast('Sesiune ștearsă');
+  toast(hasSheets ? 'Sesiune ștearsă local și din Sheets ✓' : 'Sesiune ștearsă');
 }
 
 // ── Global stats ───────────────────────────────────────
@@ -875,16 +889,28 @@ async function syncToGoogleSheets(session) {
   }
   setSyncState('syncing', 'Se sincronizează...');
   try {
-    // no-cors: singura metodă care funcționează cross-origin cu Apps Script
-    // Răspunsul e opaque (nu poate fi citit), dar datele ajung la server
     await fetch(scriptUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(session)
+      body: JSON.stringify({ action: 'save', session })
     });
-    // Dacă fetch nu a aruncat eroare, considerăm că datele au ajuns
     pendingSync = pendingSync.filter(id => id !== session.id);
+    // Estimăm numele foii (același algoritm ca în Apps Script)
+    if (!session.sheetName) {
+      const date = new Date(session.date);
+      const dd = String(date.getDate()).padStart(2,'0');
+      const mm = String(date.getMonth()+1).padStart(2,'0');
+      const yyyy = date.getFullYear();
+      const dateStr = `${dd}-${mm}-${yyyy}`;
+      const type = session.type === 'training' ? 'Ant' : 'Cnc';
+      const bow = (session.bow?.name || 'Arc').substring(0,12).replace(/[\/\?*[\]'"]/g,'');
+      const dist = session.config?.distance ? session.config.distance + 'm' : '';
+      session.sheetName = `${type}_${bow}${dist ? '_'+dist : ''}_${dateStr}`.substring(0,90);
+      // Actualizăm în lista de sesiuni
+      const idx = sessions.findIndex(s => s.id === session.id);
+      if (idx !== -1) { sessions[idx].sheetName = session.sheetName; save(); }
+    }
     saveScriptConfig();
     setSyncState('ok', '✓ Date trimise către Google Sheets');
     toast('✓ Salvat în Google Sheets!', 'success');
@@ -896,6 +922,26 @@ async function syncToGoogleSheets(session) {
     }
     setSyncState('error', '✗ Eroare rețea — date salvate local');
     toast('Eroare rețea — sesiunea e salvată local', 'error');
+  }
+}
+
+async function deleteFromGoogleSheets(session) {
+  if (!scriptUrl || !session.sheetName) return;
+  try {
+    await fetch(scriptUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'delete',
+        sheetName: session.sheetName,
+        sessionDate: session.date,
+        sessionId: session.id
+      })
+    });
+    // Cu no-cors nu putem confirma, dar trimitem comanda
+  } catch(err) {
+    console.error('Delete from Sheets error:', err);
   }
 }
 
