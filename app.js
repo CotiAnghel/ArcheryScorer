@@ -711,6 +711,12 @@ function doExcelExport() {
     const type = s.type === 'training' ? 'Ant' : 'Cnc';
     const sheetName = `${type}_${bowShort}_${dateStr}`.substring(0, 31);
 
+    // Nr maxim săgeți per serie (dinamic)
+    const maxArr = Math.max(...s.ends.map(e => e.arrows.length), 1);
+    const hdrRow = ['Seria'];
+    for (let h = 1; h <= maxArr; h++) { hdrRow.push(`Săgeată ${h}`, `Pos ${h}`); }
+    hdrRow.push('Total serie');
+
     const rows = [
       ['Tip', s.type === 'training' ? 'Antrenament' : 'Concurs'],
       ['Arc', s.bow?.name || ''],
@@ -719,12 +725,12 @@ function doExcelExport() {
       ['Distanță (m)', s.config.distance || ''],
       ['Tip țintă', s.config.target || ''],
       [],
-      ['Seria', 'Săgeată 1', 'Pos 1', 'Săgeată 2', 'Pos 2', 'Săgeată 3', 'Pos 3', 'Săgeată 4', 'Pos 4', 'Săgeată 5', 'Pos 5', 'Săgeată 6', 'Pos 6', 'Total serie']
+      hdrRow
     ];
 
     s.ends.forEach(end => {
       const row = [end.endNumber];
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < maxArr; i++) {
         const a = end.arrows[i];
         row.push(a ? a.score : '');
         row.push(a?.position ? `${a.position}h` : '');
@@ -733,8 +739,11 @@ function doExcelExport() {
       rows.push(row);
     });
 
+    const emptyTotal = ['TOTAL'];
+    for (let t = 0; t < maxArr * 2; t++) emptyTotal.push('');
+    emptyTotal.push(s.totalScore || 0);
     rows.push([]);
-    rows.push(['TOTAL', '', '', '', '', '', '', '', '', '', '', '', '', s.totalScore || 0]);
+    rows.push(emptyTotal);
     rows.push(['X-uri', s.totalXs || 0]);
     rows.push(['Medie/săgeată', s.avgPerArrow || '']);
 
