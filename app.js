@@ -203,6 +203,11 @@ function closeBowModal(e) {
     document.getElementById('modal-bow').classList.add('hidden');
   }
 }
+function closeModal(id, e) {
+  if (!e || e.target === document.getElementById(id)) {
+    document.getElementById(id)?.classList.add('hidden');
+  }
+}
 function saveBowFromModal() {
   bowConfig.name = document.getElementById('modal-bow-name').value.trim();
   bowConfig.poundage = document.getElementById('modal-bow-poundage').value.trim();
