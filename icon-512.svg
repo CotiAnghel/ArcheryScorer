@@ -1,0 +1,48 @@
+<svg width="512" height="512" viewBox="0 0 512 512" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Archery Scorer</title>
+  <desc>Archery target with arrow in gold center</desc>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="80" fill="#1a1a2e"/>
+
+  <!-- Target centered at 256,256 -->
+  <circle cx="256" cy="256" r="220" fill="#f0f0f0"/>
+  <circle cx="256" cy="256" r="190" fill="#1a1a1a"/>
+  <circle cx="256" cy="256" r="160" fill="#2563eb"/>
+  <circle cx="256" cy="256" r="115" fill="#dc2626"/>
+  <circle cx="256" cy="256" r="72"  fill="#f59e0b"/>
+  <circle cx="256" cy="256" r="36"  fill="#fbbf24" stroke="#f59e0b" stroke-width="2"/>
+
+  <!-- Cross hairs -->
+  <line x1="56"  y1="256" x2="456" y2="256" stroke="#fff" stroke-width="1.2" opacity="0.35"/>
+  <line x1="256" y1="56"  x2="256" y2="456" stroke="#fff" stroke-width="1.2" opacity="0.35"/>
+
+  <!--
+    Arrow from upper-right (420, 95) to tip near center (272, 268)
+    dx=-148, dy=173 → unit (-0.650, 0.760)
+    perp: (0.760, 0.650)
+    nock at (420,95), tip at (272,268)
+    vane base: 14px from nock → (411, 106); end 50px along → (378, 144)
+    mid of vane base: (394, 125)
+    vane tip1 = mid + 20*perp = (409, 138)
+    vane tip2 = mid - 20*perp = (379, 112)
+  -->
+
+  <!-- Shaft -->
+  <line x1="420" y1="95" x2="274" y2="266"
+        stroke="#8B6914" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- Arrowhead -->
+  <polygon points="272,268 288,258 286,276" fill="#ccc" stroke="#aaa" stroke-width="0.8"/>
+  <polygon points="272,268 258,276 260,260" fill="#ddd"/>
+
+  <!-- Nock -->
+  <circle cx="420" cy="95" r="7" fill="#1a5c8c"/>
+
+  <!-- Vane 1 (red, upper side) -->
+  <polygon points="411,106 378,144 394,138" fill="#dc2626" opacity="0.92"/>
+  <!-- Vane 2 (red, lower side) -->
+  <polygon points="411,106 378,144 394,112" fill="#dc2626" opacity="0.85"/>
+  <!-- Vane 3 (white, cock vane) -->
+  <polygon points="415,101 381,139 409,130" fill="#f0f0f0" opacity="0.78"/>
+</svg>
