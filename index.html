@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Archery Scorer</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-left">
+        <span class="app-logo">🏹</span>
+        <span class="app-title">Archery Scorer</span>
+      </div>
+      <div class="header-right">
+        <button class="install-btn hidden" id="install-btn" onclick="installApp()" title="Instalează aplicația">
+          📲
+        </button>
+        <div class="bow-badge" id="bow-badge" onclick="openBowModal()">
+          <span id="bow-name-display">— Adaugă arc —</span>
+          <span class="bow-edit-icon">✎</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- TAB BAR -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="home" onclick="switchTab('home')">
+        <span class="tab-icon">🎯</span><span class="tab-label">Sesiune</span>
+      </button>
+      <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
+        <span class="tab-icon">📊</span><span class="tab-label">Istoric</span>
+      </button>
+      <button class="tab-btn" data-tab="export" onclick="switchTab('export')">
+        <span class="tab-icon">📤</span><span class="tab-label">Export</span>
+      </button>
+      <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">
+        <span class="tab-icon">⚙️</span><span class="tab-label">Setări</span>
+      </button>
+    </nav>
+
+    <!-- ===================== TAB: HOME ===================== -->
+    <div id="tab-home" class="tab-content active">
+      <div class="session-chooser">
+        <h2 class="section-title">Nouă sesiune</h2>
+        <div class="session-cards">
+          <button class="session-card training" onclick="startSession('training')">
+            <div class="session-card-icon">🏋️</div>
+            <div class="session-card-label">Antrenament</div>
+            <div class="session-card-sub">Înregistrează o rundă de antrenament</div>
+          </button>
+          <button class="session-card competition" onclick="startSession('competition')">
+            <div class="session-card-icon">🏆</div>
+            <div class="session-card-label">Concurs</div>
+            <div class="session-card-sub">Selectează tipul de competiție</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active session panel (hidden until started) -->
+      <div id="active-session" class="active-session hidden">
+        <div class="session-header-bar">
+          <div class="session-meta-left">
+            <span class="session-type-badge" id="session-type-badge">ANTRENAMENT</span>
+            <span class="session-meta-info" id="session-meta-info"></span>
+          </div>
+          <button class="btn-danger-sm" onclick="confirmCancelSession()">✕ Anulează</button>
+        </div>
+
+        <!-- End arrow progress -->
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-labels">
+            <span>Seria <strong id="current-end">1</strong> <span id="total-ends-label"></span></span>
+            <span>Săgeată <strong id="current-arrow-in-end">1</strong> în seria curentă</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
+
+        <!-- Arrow input grid -->
+        <div class="arrow-input-section">
+          <div class="current-end-display">
+            <div class="end-arrows" id="end-arrows-display"></div>
+          </div>
+
+          <div class="score-input-row">
+            <div class="input-group-inline">
+              <label class="input-label">Punctaj</label>
+              <select id="arrow-score" class="score-select">
+                <option value="">—</option>
+                <option value="X">X (10*)</option>
+                <option value="10">10</option>
+                <option value="9">9</option>
+                <option value="8">8</option>
+                <option value="7">7</option>
+                <option value="6">6</option>
+                <option value="5">5</option>
+                <option value="4">4</option>
+                <option value="3">3</option>
+                <option value="2">2</option>
+                <option value="1">1</option>
+                <option value="M">M (Rateu)</option>
+              </select>
+            </div>
+            <div class="input-group-inline">
+              <label class="input-label">Poziție (oră)</label>
+              <input type="number" id="arrow-position" class="pos-input" min="1" max="12" placeholder="1–12" />
+            </div>
+            <button class="btn-add-arrow" id="btn-add-arrow" onclick="addArrow()">
+              ➤ Adaugă
+            </button>
+          </div>
+
+          <div class="end-summary" id="end-summary"></div>
+
+          <div class="action-buttons">
+            <button class="btn-secondary" id="btn-prev-end" onclick="prevEnd()" style="display:none">← Anulează seria</button>
+            <button class="btn-primary" id="btn-confirm-end" onclick="confirmEnd()" disabled>
+              ✓ Salvează seria
+            </button>
+          </div>
+        </div>
+
+        <!-- Running totals -->
+        <div class="running-totals">
+          <div class="total-card">
+            <span class="total-label">Total curent</span>
+            <span class="total-value" id="running-total">0</span>
+          </div>
+          <div class="total-card">
+            <span class="total-label">X-uri</span>
+            <span class="total-value" id="running-x">0</span>
+          </div>
+          <div class="total-card">
+            <span class="total-label">Medie/săgeată</span>
+            <span class="total-value" id="running-avg">—</span>
+          </div>
+        </div>
+
+        <!-- Finish session -->
+        <div style="padding: 0 1rem 1rem;">
+          <button class="btn-finish" id="btn-finish-session" onclick="finishSession()" disabled>
+            💾 Finalizează și salvează sesiunea
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== TAB: HISTORY ===================== -->
+    <div id="tab-history" class="tab-content">
+      <div class="history-header">
+        <h2 class="section-title">Sesiuni anterioare</h2>
+        <div class="filter-row">
+          <select id="filter-type" onchange="renderHistory()" class="filter-select">
+            <option value="all">Toate tipurile</option>
+            <option value="training">Antrenamente</option>
+            <option value="competition">Concursuri</option>
+          </select>
+        </div>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </div>
+
+    <!-- ===================== TAB: EXPORT ===================== -->
+    <div id="tab-export" class="tab-content">
+      <h2 class="section-title">Export date</h2>
+
+      <div class="export-section">
+        <div class="export-card" onclick="exportExcel()">
+          <div class="export-icon">📊</div>
+          <div class="export-info">
+            <div class="export-title">Export Excel (.xlsx)</div>
+            <div class="export-sub">Fiecare sesiune pe foaie separată, cu statistici</div>
+          </div>
+          <div class="export-arrow">→</div>
+        </div>
+
+        <div class="export-card" onclick="exportCSV()">
+          <div class="export-icon">📄</div>
+          <div class="export-info">
+            <div class="export-title">Export CSV</div>
+            <div class="export-sub">Format text simplu pentru analiză externă</div>
+          </div>
+          <div class="export-arrow">→</div>
+        </div>
+
+        <div class="export-card google-card" onclick="openGoogleSheetsSetup()">
+          <div class="export-icon">🔗</div>
+          <div class="export-info">
+            <div class="export-title">Sincronizare Google Sheets</div>
+            <div class="export-sub" id="gsheets-status-text">Neconfigurat — apasă pentru configurare</div>
+          </div>
+          <div class="sync-status-dot" id="sync-status-dot"></div>
+        </div>
+      </div>
+
+      <!-- Sync status bar -->
+      <div id="sync-status-bar" class="sync-status-bar hidden">
+        <div class="sync-bar-left">
+          <span class="sync-bar-dot" id="sync-bar-dot"></span>
+          <span id="sync-bar-text">Neconfigurat</span>
+        </div>
+        <button class="sync-manual-btn" id="sync-manual-btn" onclick="syncAllPending()" style="display:none">
+          ↑ Sincronizează acum
+        </button>
+      </div>
+
+      <!-- Google Sheets config panel -->
+      <div id="gsheets-config" class="gsheets-config hidden">
+        <h3 class="subsection-title">Configurare Google Sheets (Apps Script)</h3>
+        <div class="info-box">
+          <strong>Pași necesari (o singură dată):</strong>
+          <ol class="setup-steps">
+            <li>Deschide <a href="https://sheets.google.com" target="_blank" class="link">Google Sheets</a> → creează un fișier nou (ex: <em>Archery Scorer Data</em>)</li>
+            <li>Click <strong>Extensions → Apps Script</strong></li>
+            <li>Șterge tot și lipește codul din fișierul <code class="code-inline">appsscript.gs</code> (din zip)</li>
+            <li>Click <strong>Deploy → New deployment → Web App</strong></li>
+            <li>Execute as: <strong>Me</strong> · Who has access: <strong>Anyone</strong> → Deploy</li>
+            <li>Copiază <strong>Web App URL</strong> mai jos</li>
+          </ol>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Web App URL</label>
+          <input type="text" id="google-script-url" class="text-input" placeholder="https://script.google.com/macros/s/..." />
+        </div>
+        <button class="btn-primary" onclick="saveScriptUrl()">💾 Salvează și testează conexiunea</button>
+        <div id="script-test-result" class="hidden" style="margin-top:.75rem;font-size:.82rem;padding:.5rem .75rem;border-radius:6px;"></div>
+      </div>
+
+      <div class="export-section" style="margin-top:1.5rem;">
+        <h3 class="subsection-title">Statistici globale</h3>
+        <div id="global-stats" class="stats-grid"></div>
+      </div>
+    </div>
+
+    <!-- ===================== TAB: SETTINGS ===================== -->
+    <div id="tab-settings" class="tab-content">
+      <h2 class="section-title">Setări</h2>
+
+      <div class="settings-section">
+        <h3 class="subsection-title">Arcul meu</h3>
+        <div class="input-group">
+          <label class="input-label">Numele arcului</label>
+          <input type="text" id="settings-bow-name" class="text-input" placeholder="ex: Hoyt Formula XI" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Puterea (lbs)</label>
+          <input type="number" id="settings-bow-poundage" class="text-input" placeholder="ex: 42" step="0.5" min="1" max="100" />
+        </div>
+        <div class="input-group">
+          <label class="input-label">Tip arc</label>
+          <select id="settings-bow-type" class="score-select">
+            <option value="recurve">Recurve</option>
+            <option value="compound">Compound</option>
+            <option value="barebow">Barebow</option>
+            <option value="longbow">Longbow</option>
+            <option value="traditional">Traditional</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="saveBowSettings()">💾 Salvează</button>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="subsection-title">Date aplicație</h3>
+        <button class="btn-danger" onclick="clearAllData()">🗑️ Șterge toate datele locale</button>
+        <p class="settings-hint">Atenție: această acțiune este ireversibilă.</p>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="subsection-title">Despre aplicație</h3>
+        <p class="settings-hint">Archery Scorer v1.0 — World Archery compatible<br>Date salvate local în browser (IndexedDB)</p>
+      </div>
+    </div>
+
+  </div><!-- #app -->
+
+  <!-- ============== BANNER: INSTALL PWA ============== -->
+  <div id="install-banner" class="install-banner hidden">
+    <div class="install-banner-content">
+      <span class="install-banner-icon">🏹</span>
+      <div class="install-banner-text">
+        <strong>Instalează Archery Scorer</strong>
+        <span>Acces rapid de pe ecranul principal</span>
+      </div>
+    </div>
+    <div class="install-banner-actions">
+      <button class="install-banner-btn" onclick="installApp()">Instalează</button>
+      <button class="install-banner-dismiss" onclick="dismissInstallBanner()">✕</button>
+    </div>
+  </div>
+
+  <!-- ============== MODAL: iOS INSTALL ============== -->
+  <div id="modal-ios-install" class="modal-overlay hidden" onclick="closeModal('modal-ios-install', event)">
+    <div class="modal-box">
+      <div class="modal-title">📲 Instalează pe iPhone / iPad</div>
+      <div class="ios-steps">
+        <div class="ios-step">
+          <span class="ios-step-num">1</span>
+          <span>Apasă butonul <strong>Partajare</strong> <span class="ios-icon">⬆️</span> din bara Safari de jos</span>
+        </div>
+        <div class="ios-step">
+          <span class="ios-step-num">2</span>
+          <span>Derulează în jos și alege <strong>„Adaugă pe ecranul principal"</strong></span>
+        </div>
+        <div class="ios-step">
+          <span class="ios-step-num">3</span>
+          <span>Apasă <strong>„Adaugă"</strong> în colțul din dreapta sus</span>
+        </div>
+      </div>
+      <p style="font-size:.78rem;color:var(--text-dim);text-align:center;margin-top:.5rem;">
+        Aplicația va apărea pe ecranul principal ca orice altă aplicație, fără browser.
+      </p>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="closeModal('modal-ios-install'); dismissInstallBanner()">Am înțeles</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== MODAL: BOW QUICK EDIT ============== -->
+  <div id="modal-bow" class="modal-overlay hidden" onclick="closeBowModal(event)">
+    <div class="modal-box">
+      <div class="modal-title">Arc activ</div>
+      <div class="input-group">
+        <label class="input-label">Nume</label>
+        <input type="text" id="modal-bow-name" class="text-input" placeholder="ex: Hoyt Formula XI" />
+      </div>
+      <div class="input-group">
+        <label class="input-label">Putere (lbs)</label>
+        <input type="number" id="modal-bow-poundage" class="text-input" placeholder="ex: 42" step="0.5" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeBowModal()">Anulează</button>
+        <button class="btn-primary" onclick="saveBowFromModal()">Salvează</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== MODAL: START TRAINING ============== -->
+  <div id="modal-training" class="modal-overlay hidden" onclick="closeModal('modal-training', event)">
+    <div class="modal-box">
+      <div class="modal-title">🏋️ Nou antrenament</div>
+      <div class="input-group">
+        <label class="input-label">Distanță (m)</label>
+        <select id="tr-distance" class="score-select">
+          <option value="18">18m (indoor)</option>
+          <option value="25">25m</option>
+          <option value="30">30m</option>
+          <option value="50">50m</option>
+          <option value="60">60m</option>
+          <option value="70">70m (Olympic)</option>
+          <option value="90">90m</option>
+          <option value="custom">Altă distanță...</option>
+        </select>
+        <input type="number" id="tr-distance-custom" class="text-input hidden" placeholder="Distanță în metri" min="1" max="300" style="margin-top:0.5rem;" />
+      </div>
+      <div class="input-group">
+        <label class="input-label">Tip țintă</label>
+        <select id="tr-target" class="score-select">
+          <optgroup label="Indoor">
+            <option value="40cm_10ring_indoor">40cm – 10 zone (indoor, 18m)</option>
+            <option value="40cm_5ring_indoor">40cm – 5 zone compound (indoor)</option>
+            <option value="60cm_indoor">60cm – 5 zone (indoor)</option>
+          </optgroup>
+          <optgroup label="Outdoor recurve / barebow">
+            <option value="80cm_10ring">80cm – 10 zone (30m–60m)</option>
+            <option value="122cm_10ring">122cm – 10 zone (60m–90m)</option>
+            <option value="122cm_5ring">122cm – 5 zone (1440 round)</option>
+          </optgroup>
+          <optgroup label="Compound outdoor">
+            <option value="80cm_6ring_compound">80cm – 6 zone compound</option>
+            <option value="80cm_X_compound">80cm – 10 zone X10 compound</option>
+          </optgroup>
+          <optgroup label="Field">
+            <option value="field_60cm">60cm – teren (field)</option>
+            <option value="field_80cm">80cm – teren (field)</option>
+          </optgroup>
+          <optgroup label="3D">
+            <option value="3d_waf">3D WAF – animal scoring</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-training')">Anulează</button>
+        <button class="btn-primary" onclick="beginTraining()">▶ Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== MODAL: START COMPETITION ============== -->
+  <div id="modal-competition" class="modal-overlay hidden" onclick="closeModal('modal-competition', event)">
+    <div class="modal-box">
+      <div class="modal-title">🏆 Tip concurs</div>
+      <div class="comp-list" id="comp-list"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('modal-competition')">Anulează</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== MODAL: SESSION DETAIL ============== -->
+  <div id="modal-session-detail" class="modal-overlay hidden" onclick="closeModal('modal-session-detail', event)">
+    <div class="modal-box modal-wide">
+      <div class="modal-title" id="detail-title">Detalii sesiune</div>
+      <div id="detail-content" class="detail-content"></div>
+      <div class="modal-actions">
+        <button class="btn-danger-sm" onclick="deleteSession()" style="margin-right:auto">🗑️ Șterge</button>
+        <button class="btn-secondary" onclick="closeModal('modal-session-detail')">Închide</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TOAST ============== -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
