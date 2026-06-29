@@ -262,8 +262,6 @@ function selectCompetition(id) {
 }
 
 function beginTraining() {
-  const ape = parseInt(document.getElementById('tr-arrows-per-end').value);
-  const numEnds = parseInt(document.getElementById('tr-num-ends').value) || 10;
   const distEl = document.getElementById('tr-distance');
   let dist = distEl.value === 'custom'
     ? (parseInt(document.getElementById('tr-distance-custom').value) || 18)
@@ -275,7 +273,8 @@ function beginTraining() {
     type: 'training',
     bow: { ...bowConfig },
     date: new Date().toISOString(),
-    config: { arrowsPerEnd: ape, numEnds, distance: dist, target },
+    // numEnds: nelimitat (0 = free-form), arrowsPerEnd: 0 = dinamic per serie
+    config: { arrowsPerEnd: 0, numEnds: 0, distance: dist, target },
     ends: []
   };
   closeModal('modal-training');
@@ -334,9 +333,8 @@ function updateSessionMeta() {
   let info = `${dateStr}`;
   if (config.distance) info += ` · ${config.distance}m`;
   if (currentSession.type === 'competition') info += ` · ${currentSession.competition.name}`;
+  else info += ' · liber';
   document.getElementById('session-meta-info').textContent = info;
-  document.getElementById('total-ends').textContent = config.numEnds;
-  document.getElementById('arrows-per-end').textContent = config.arrowsPerEnd;
 }
 
 function currentArrowsPerEnd() {
@@ -344,45 +342,74 @@ function currentArrowsPerEnd() {
   if (config.flatEnds && config.flatEnds.length > 0) {
     return config.flatEnds[currentEndIndex]?.arrowsPerEnd || config.arrowsPerEnd;
   }
-  return config.arrowsPerEnd;
+  // Training free-form: fără limită fixă (0 = nelimitat)
+  return config.arrowsPerEnd || Infinity;
 }
 
 function updateEndUI() {
+  const freeForm = currentSession.config.arrowsPerEnd === 0;
   const numEnds = currentSession.config.numEnds;
   const ape = currentArrowsPerEnd();
-  const totalArrows = numEnds * (currentSession.config.arrowsPerEnd);
   const doneArrows = currentSession.ends.reduce((s, e) => s + e.arrows.length, 0);
 
   document.getElementById('current-end').textContent = currentEndIndex + 1;
-  document.getElementById('current-arrow-in-end').textContent = endArrows.length + 1;
-  document.getElementById('arrows-per-end').textContent = ape;
+  document.getElementById('current-arrow-in-end').textContent = endArrows.length;
 
-  const pct = totalArrows > 0 ? (doneArrows / totalArrows) * 100 : 0;
+  // Label "/ total" apare doar dacă nu e free-form
+  const totalEndsLabel = document.getElementById('total-ends-label');
+  if (totalEndsLabel) {
+    totalEndsLabel.textContent = (!freeForm && numEnds) ? `/ ${numEnds}` : '';
+  }
+
+  // Progress bar: pentru free-form folosim serii salvate
+  let pct = 0;
+  if (!freeForm && numEnds > 0) {
+    pct = (currentSession.ends.length / numEnds) * 100;
+  } else {
+    // animație pulsantă la free-form
+    pct = currentSession.ends.length > 0 ? Math.min(currentSession.ends.length * 8, 95) : 0;
+  }
   document.getElementById('progress-fill').style.width = `${pct}%`;
 
-  renderEndArrows(ape);
+  renderEndArrows(freeForm ? endArrows.length + 1 : ape);
   updateEndSummary();
   updateRunningTotals();
 
   const confirmBtn = document.getElementById('btn-confirm-end');
-  confirmBtn.disabled = endArrows.length < ape;
+  // Free-form: poate salva seria dacă are cel puțin 1 săgeată
+  if (freeForm) {
+    confirmBtn.disabled = endArrows.length === 0;
+    confirmBtn.textContent = endArrows.length > 0
+      ? `✓ Salvează seria (${endArrows.length} săgeți)`
+      : '✓ Salvează seria';
+  } else {
+    confirmBtn.disabled = endArrows.length < ape;
+    confirmBtn.textContent = '✓ Salvează seria';
+  }
+
   document.getElementById('btn-finish-session').disabled = currentSession.ends.length === 0;
   document.getElementById('btn-prev-end').style.display = currentEndIndex > 0 ? 'block' : 'none';
 }
 
 function renderEndArrows(ape) {
   const container = document.getElementById('end-arrows-display');
+  const freeForm = currentSession && currentSession.config.arrowsPerEnd === 0;
   let html = '';
-  for (let i = 0; i < ape; i++) {
+  const count = freeForm ? endArrows.length : ape;
+  for (let i = 0; i < count; i++) {
     const a = endArrows[i];
     if (a) {
       html += `<div class="arrow-chip ${scoreClass(a.score)}">
         <span>${a.score}</span>
         <span class="chip-pos">${a.position ? `${a.position}h` : ''}</span>
       </div>`;
-    } else {
+    } else if (!freeForm) {
       html += `<div class="arrow-chip pending">${i + 1}</div>`;
     }
+  }
+  // Free-form: arată un chip placeholder pentru săgeata următoare
+  if (freeForm) {
+    html += `<div class="arrow-chip pending">+</div>`;
   }
   container.innerHTML = html;
 }
@@ -415,8 +442,11 @@ function addArrow() {
   const score = scoreEl.value;
   if (!score) { toast('Selectează un punctaj!'); scoreEl.focus(); return; }
 
-  const ape = currentArrowsPerEnd();
-  if (endArrows.length >= ape) { toast('Seria este completă!'); return; }
+  const freeFormAdd = currentSession && currentSession.config.arrowsPerEnd === 0;
+  if (!freeFormAdd) {
+    const ape = currentArrowsPerEnd();
+    if (endArrows.length >= ape) { toast('Seria este completă! Salvează și treci la seria nouă.'); return; }
+  }
 
   const pos = parseInt(posEl.value) || null;
   if (posEl.value && (pos < 1 || pos > 12)) { toast('Poziția trebuie să fie 1–12!'); posEl.focus(); return; }
@@ -429,8 +459,13 @@ function addArrow() {
 }
 
 function confirmEnd() {
-  const ape = currentArrowsPerEnd();
-  if (endArrows.length < ape) return;
+  const freeForm = currentSession.config.arrowsPerEnd === 0;
+  if (!freeForm) {
+    const ape = currentArrowsPerEnd();
+    if (endArrows.length < ape) return;
+  } else {
+    if (endArrows.length === 0) { toast('Adaugă cel puțin o săgeată!'); return; }
+  }
 
   const endTotal = endArrows.reduce((s, a) => s + scoreNumeric(a.score), 0);
   currentSession.ends.push({
@@ -445,13 +480,18 @@ function confirmEnd() {
   endArrows = [];
   currentEndIndex++;
 
-  const numEnds = currentSession.config.numEnds;
-  if (currentEndIndex >= numEnds) {
-    // All ends done — auto-finish prompt
-    document.getElementById('btn-confirm-end').textContent = '✓ Toate seriile complete!';
-    document.getElementById('btn-confirm-end').disabled = true;
-    document.getElementById('btn-finish-session').disabled = false;
-    toast('Toate seriile complete! Apasă Finalizează.', 'success');
+  // Pentru concurs cu număr fix de serii
+  if (!freeForm) {
+    const numEnds = currentSession.config.numEnds;
+    if (currentEndIndex >= numEnds) {
+      document.getElementById('btn-confirm-end').textContent = '✓ Toate seriile complete!';
+      document.getElementById('btn-confirm-end').disabled = true;
+      document.getElementById('btn-finish-session').disabled = false;
+      toast('Toate seriile complete! Apasă Finalizează.', 'success');
+      return;
+    }
+  } else {
+    toast(`Seria ${currentSession.ends.length} salvată ✓`, 'success');
   }
   updateEndUI();
 }

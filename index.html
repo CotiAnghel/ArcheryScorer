@@ -76,8 +76,8 @@
         <!-- End arrow progress -->
         <div class="progress-bar-wrap">
           <div class="progress-bar-labels">
-            <span>Seria <strong id="current-end">1</strong> / <span id="total-ends">—</span></span>
-            <span>Săgeată <strong id="current-arrow-in-end">1</strong> / <span id="arrows-per-end">—</span></span>
+            <span>Seria <strong id="current-end">1</strong> <span id="total-ends-label"></span></span>
+            <span>Săgeată <strong id="current-arrow-in-end">1</strong> în seria curentă</span>
           </div>
           <div class="progress-track">
             <div class="progress-fill" id="progress-fill"></div>
@@ -121,9 +121,9 @@
           <div class="end-summary" id="end-summary"></div>
 
           <div class="action-buttons">
-            <button class="btn-secondary" id="btn-prev-end" onclick="prevEnd()" style="display:none">← Seria anterioară</button>
+            <button class="btn-secondary" id="btn-prev-end" onclick="prevEnd()" style="display:none">← Anulează seria</button>
             <button class="btn-primary" id="btn-confirm-end" onclick="confirmEnd()" disabled>
-              ✓ Confirmă seria
+              ✓ Salvează seria
             </button>
           </div>
         </div>
@@ -304,17 +304,6 @@
   <div id="modal-training" class="modal-overlay hidden" onclick="closeModal('modal-training', event)">
     <div class="modal-box">
       <div class="modal-title">🏋️ Nou antrenament</div>
-      <div class="input-group">
-        <label class="input-label">Număr săgeți per serie</label>
-        <select id="tr-arrows-per-end" class="score-select">
-          <option value="3">3 săgeți</option>
-          <option value="6" selected>6 săgeți</option>
-        </select>
-      </div>
-      <div class="input-group">
-        <label class="input-label">Număr de serii</label>
-        <input type="number" id="tr-num-ends" class="text-input" value="10" min="1" max="60" />
-      </div>
       <div class="input-group">
         <label class="input-label">Distanță (m)</label>
         <select id="tr-distance" class="score-select">
