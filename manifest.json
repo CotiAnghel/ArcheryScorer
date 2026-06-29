@@ -1,7 +1,7 @@
 {
   "name": "Archery Scorer",
   "short_name": "Archery",
-  "description": "Înregistrare punctaj tir cu arcul",
+  "description": "Înregistrare punctaj tir cu arcul — World Archery compatible",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f1117",
