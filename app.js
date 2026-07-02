@@ -617,8 +617,11 @@ function openSessionDetail(id) {
   });
 
   html += '</div>';
+  html += '<div id="centraj-section" class="centraj-section"></div>';
   document.getElementById('detail-content').innerHTML = html;
   document.getElementById('modal-session-detail').classList.remove('hidden');
+  // Randează centrajul după ce DOM-ul e gata
+  setTimeout(() => renderCentrajSection(s, 'centraj-section'), 0);
 }
 
 function deleteSession() {
@@ -669,6 +672,130 @@ function renderGlobalStats() {
     <div class="stat-card-label">${l}</div>
     <div class="stat-card-value">${v}</div>
   </div>`).join('');
+}
+
+
+// ── Centraj ────────────────────────────────────────────────
+const SCORE_RADIUS = { 'X': 0, '10': 0.5, '9': 1.5, '8': 2.5, '7': 3.5,
+  '6': 4.5, '5': 5.5, '4': 6.5, '3': 7.5, '2': 8.5, '1': 9.5, 'M': 10.5 };
+
+function arrowToXY(score, position) {
+  const r = SCORE_RADIUS[String(score)] ?? 5.0;
+  if (r === 0 || !position) return { x: 0, y: 0, r: 0 };
+  const angleDeg = (parseInt(position) / 12.0) * 360.0;
+  const angleRad = angleDeg * Math.PI / 180;
+  return { x: r * Math.sin(angleRad), y: -r * Math.cos(angleRad), r };
+}
+
+function groupCenter(arrows) {
+  const valid = arrows.filter(a => a.score !== 'M' && a.position);
+  if (!valid.length) return null;
+  const coords = valid.map(a => arrowToXY(a.score, a.position));
+  const cx = coords.reduce((s, c) => s + c.x, 0) / coords.length;
+  const cy = coords.reduce((s, c) => s + c.y, 0) / coords.length;
+  const spread = Math.sqrt(coords.reduce((s, c) => s + (c.x-cx)**2 + (c.y-cy)**2, 0) / coords.length);
+  const angleDeg = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360;
+  const hour = ((angleDeg / 360 * 12) % 12) || 12;
+  const dist = Math.sqrt(cx*cx + cy*cy);
+  return { cx: +cx.toFixed(2), cy: +cy.toFixed(2), spread: +spread.toFixed(2),
+           hour: +hour.toFixed(1), dist: +dist.toFixed(2), count: valid.length };
+}
+
+function directionLabel(hour) {
+  const h = Math.round(hour);
+  const labels = { 12: 'sus', 1: 'sus-dreapta', 2: 'sus-dreapta', 3: 'dreapta',
+    4: 'jos-dreapta', 5: 'jos-dreapta', 6: 'jos', 7: 'jos-stânga', 8: 'jos-stânga',
+    9: 'stânga', 10: 'sus-stânga', 11: 'sus-stânga' };
+  return `${labels[h] || '—'} (${h})`;
+}
+
+function sessionCentraj(session) {
+  const allArrows = session.ends.flatMap(e => e.arrows);
+  const sessionCenter = groupCenter(allArrows);
+  const endCenters = session.ends.map((end, i) => ({
+    endNum: end.endNumber || i + 1,
+    center: groupCenter(end.arrows)
+  })).filter(e => e.center);
+  return { sessionCenter, endCenters };
+}
+
+function renderCentrajSection(session, containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const { sessionCenter, endCenters } = sessionCentraj(session);
+
+  if (!sessionCenter) {
+    el.innerHTML = '<p class="centraj-empty">Introdu poziții (oră) pentru a vedea centrajul.</p>';
+    return;
+  }
+
+  const svgSize = 180;
+  const cx = svgSize / 2;
+  const cy = svgSize / 2;
+  const maxR = 82;
+  const scale = maxR / 10.5;
+
+  function toSVG(x, y) { return { sx: cx + x * scale, sy: cy + y * scale }; }
+
+  let svg = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}" class="centraj-svg">`;
+  [{ r: 10.5, fill: '#f0f0f0' }, { r: 9.5, fill: '#1a1a1a' },
+   { r: 7.5,  fill: '#2563eb' }, { r: 5.5,  fill: '#dc2626' },
+   { r: 3.5,  fill: '#f59e0b' }, { r: 1.5,  fill: '#fbbf24' },
+   { r: 0.5,  fill: '#fde68a' }
+  ].forEach(ring => {
+    svg += `<circle cx="${cx}" cy="${cy}" r="${ring.r * scale}" fill="${ring.fill}" opacity="0.75"/>`;
+  });
+  svg += `<line x1="${cx-maxR}" y1="${cy}" x2="${cx+maxR}" y2="${cy}" stroke="#fff" stroke-width="0.5" opacity="0.3"/>`;
+  svg += `<line x1="${cx}" y1="${cy-maxR}" x2="${cx}" y2="${cy+maxR}" stroke="#fff" stroke-width="0.5" opacity="0.3"/>`;
+
+  const colors = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316','#ef4444','#06b6d4','#84cc16'];
+  endCenters.forEach((ec, i) => {
+    const p = toSVG(ec.center.cx, ec.center.cy);
+    const col = colors[i % colors.length];
+    svg += `<circle cx="${p.sx}" cy="${p.sy}" r="4" fill="${col}" opacity="0.85"/>`;
+    svg += `<text x="${p.sx+5}" y="${p.sy+4}" fill="${col}" font-size="8" font-family="monospace" font-weight="bold">S${ec.endNum}</text>`;
+  });
+
+  const sc = toSVG(sessionCenter.cx, sessionCenter.cy);
+  svg += `<line x1="${cx}" y1="${cy}" x2="${sc.sx}" y2="${sc.sy}" stroke="#fff" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.7"/>`;
+  svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="7" fill="none" stroke="#fff" stroke-width="2.5"/>`;
+  svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="2.5" fill="#fff"/>`;
+  svg += '</svg>';
+
+  const distLabel = sessionCenter.dist < 0.5 ? 'centrat ✓' :
+    sessionCenter.dist < 2 ? 'ușor deplasat' : sessionCenter.dist < 4 ? 'deplasat' : 'deplasat mult';
+  const distColor = sessionCenter.dist < 0.5 ? 'var(--accent3)' :
+    sessionCenter.dist < 2 ? 'var(--accent)' : 'var(--accent2)';
+
+  el.innerHTML = `
+    <div class="centraj-wrap">
+      <div class="centraj-target-wrap">${svg}</div>
+      <div class="centraj-info">
+        <div class="centraj-stat">
+          <span class="centraj-label">Centru sesiune</span>
+          <span class="centraj-value" style="color:${distColor}">${distLabel}</span>
+        </div>
+        <div class="centraj-stat">
+          <span class="centraj-label">Direcție eroare</span>
+          <span class="centraj-value">${sessionCenter.dist < 0.5 ? '—' : directionLabel(sessionCenter.hour)}</span>
+        </div>
+        <div class="centraj-stat">
+          <span class="centraj-label">Dispersie grup</span>
+          <span class="centraj-value">${sessionCenter.spread}</span>
+        </div>
+        <div class="centraj-stat">
+          <span class="centraj-label">Săgeți analizate</span>
+          <span class="centraj-value">${sessionCenter.count}</span>
+        </div>
+        <div class="centraj-legend">
+          <div class="legend-item"><span class="legend-dot" style="border:2px solid #fff;background:transparent"></span>Centru sesiune</div>
+          ${endCenters.slice(0,6).map((ec,i) =>
+            `<div class="legend-item"><span class="legend-dot" style="background:${colors[i%colors.length]}"></span>Seria ${ec.endNum}</div>`
+          ).join('')}
+          ${endCenters.length > 6 ? `<div style="color:var(--text-dim);font-size:.68rem">+ ${endCenters.length-6} serii</div>` : ''}
+        </div>
+      </div>
+    </div>`;
 }
 
 // ── Export Excel ───────────────────────────────────────

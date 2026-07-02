@@ -116,7 +116,10 @@ function writeSessionToSheet(sheet, data) {
 
   var row = 1;
   info.forEach(function(r) {
-    sheet.getRange(row, 1, 1, 2).setValues([r]);
+    var infoRange = sheet.getRange(row, 1, 1, 2);
+    infoRange.setValues([r]);
+    infoRange.setFontColor('#1a1a2e');
+    infoRange.setBackground('#ffffff');
     row++;
   });
   row++;
@@ -131,39 +134,222 @@ function writeSessionToSheet(sheet, data) {
     ['Cel mai bun end',best],
   ];
   stats.forEach(function(r) {
-    sheet.getRange(row, 1, 1, 2).setValues([r]);
+    var statRange = sheet.getRange(row, 1, 1, 2);
+    statRange.setValues([r]);
     if (r[0].indexOf('──') !== -1) {
-      var hdr = sheet.getRange(row, 1, 1, 2);
-      hdr.setBackground('#1a1a2e'); hdr.setFontColor('#e8c44a'); hdr.setFontWeight('bold');
+      statRange.setBackground('#1a1a2e');
+      statRange.setFontColor('#e8c44a');
+      statRange.setFontWeight('bold');
+    } else {
+      statRange.setBackground('#f8f9fa');
+      statRange.setFontColor('#1a1a2e');
     }
     row++;
   });
   row++;
 
-  var tableHdr = ['Seria','Sg.1','Pos.1','Sg.2','Pos.2','Sg.3','Pos.3','Sg.4','Pos.4','Sg.5','Pos.5','Sg.6','Pos.6','Total serie'];
+  // Calculează numărul maxim de săgeți per serie (dinamic)
+  var maxArrows = 0;
+  ends.forEach(function(end) {
+    var cnt = (end.arrows || []).length;
+    if (cnt > maxArrows) maxArrows = cnt;
+  });
+  if (maxArrows === 0) maxArrows = 6;
+
+  var tableStartRow = row;
+  var tableStartCol = 1;
+
+  // Header dinamic
+  var tableHdr = ['Seria'];
+  for (var h = 1; h <= maxArrows; h++) {
+    tableHdr.push('Sg.' + h);
+    tableHdr.push('Poz.' + h);
+  }
+  tableHdr.push('Total serie');
   sheet.getRange(row, 1, 1, tableHdr.length).setValues([tableHdr]);
   var hdrRange = sheet.getRange(row, 1, 1, tableHdr.length);
   hdrRange.setBackground('#2e3452'); hdrRange.setFontColor('#e8c44a'); hdrRange.setFontWeight('bold');
+  hdrRange.setHorizontalAlignment('center');
   row++;
 
+  var firstDataRow = row;
   ends.forEach(function(end, idx) {
     var r = [end.endNumber || idx + 1];
-    for (var i = 0; i < 6; i++) {
+    for (var i = 0; i < maxArrows; i++) {
       var a = end.arrows && end.arrows[i];
       r.push(a ? a.score : '');
       r.push(a && a.position ? a.position + 'h' : '');
     }
     r.push(end.total || 0);
     sheet.getRange(row, 1, 1, r.length).setValues([r]);
-    if (idx % 2 === 0) sheet.getRange(row, 1, 1, r.length).setBackground('#1e2338');
+    var rowRange = sheet.getRange(row, 1, 1, r.length);
+    if (idx % 2 === 0) {
+      rowRange.setBackground('#e8f0fe');
+    } else {
+      rowRange.setBackground('#ffffff');
+    }
+    rowRange.setFontColor('#1a1a2e');
+    rowRange.setHorizontalAlignment('center');
     row++;
   });
+  var lastDataRow = row - 1;
 
-  var totRow = ['TOTAL','','','','','','','','','','','','', totalScore];
+  var totRow = ['TOTAL'];
+  for (var t = 0; t < maxArrows * 2; t++) totRow.push('');
+  totRow.push(totalScore);
   sheet.getRange(row, 1, 1, totRow.length).setValues([totRow]);
   var totRange = sheet.getRange(row, 1, 1, totRow.length);
   totRange.setBackground('#e8c44a'); totRange.setFontColor('#111'); totRange.setFontWeight('bold');
-  sheet.autoResizeColumns(1, 14);
+  totRange.setHorizontalAlignment('center');
+
+  // ── Formatare vizuală: grupare Săgeată+Poziție ──────────
+  formatArrowTable(sheet, tableStartRow, firstDataRow, lastDataRow, maxArrows);
+
+  // ── Centraj per serie și per sesiune ────────────────────
+  var centrajStartRow = row + 2;
+  writeCentrajSection(sheet, centrajStartRow, ends);
+}
+
+function writeCentrajSection(sheet, startRow, ends) {
+  var SCORE_RADIUS = { 'X': 0, '10': 0.5, '9': 1.5, '8': 2.5, '7': 3.5,
+    '6': 4.5, '5': 5.5, '4': 6.5, '3': 7.5, '2': 8.5, '1': 9.5, 'M': 10.5 };
+
+  function arrowToXY(score, position) {
+    var r = SCORE_RADIUS[String(score)];
+    if (r === undefined) r = 5.0;
+    if (r === 0 || !position) return { x: 0, y: 0 };
+    var angleDeg = (parseInt(position) / 12.0) * 360.0;
+    var angleRad = angleDeg * Math.PI / 180;
+    return { x: r * Math.sin(angleRad), y: -r * Math.cos(angleRad) };
+  }
+
+  function groupCenter(arrows) {
+    var valid = arrows.filter(function(a) { return a.score !== 'M' && a.position; });
+    if (!valid.length) return null;
+    var coords = valid.map(function(a) { return arrowToXY(a.score, a.position); });
+    var cx = coords.reduce(function(s,c){return s+c.x;},0)/coords.length;
+    var cy = coords.reduce(function(s,c){return s+c.y;},0)/coords.length;
+    var spread = Math.sqrt(coords.reduce(function(s,c){
+      return s+(c.x-cx)*(c.x-cx)+(c.y-cy)*(c.y-cy);
+    },0)/coords.length);
+    var dist = Math.sqrt(cx*cx+cy*cy);
+    var angleDeg = ((Math.atan2(cx,-cy)*180/Math.PI)+360)%360;
+    var hour = ((angleDeg/360*12)%12)||12;
+    var dirLabels = {12:'sus',1:'sus-dreapta',2:'sus-dreapta',3:'dreapta',
+      4:'jos-dreapta',5:'jos-dreapta',6:'jos',7:'jos-stanga',8:'jos-stanga',
+      9:'stanga',10:'sus-stanga',11:'sus-stanga'};
+    var dir = dist < 0.5 ? 'centrat' : (dirLabels[Math.round(hour)]||'—')+' ('+Math.round(hour)+'h)';
+    return { cx: Math.round(cx*100)/100, cy: Math.round(cy*100)/100,
+             spread: Math.round(spread*100)/100, dist: Math.round(dist*100)/100,
+             dir: dir, count: valid.length };
+  }
+
+  var row = startRow;
+
+  // Header secțiune
+  var hdrRange = sheet.getRange(row, 1, 1, 6);
+  hdrRange.merge().setValue('CENTRAJ GRUP');
+  hdrRange.setBackground('#1a1a2e').setFontColor('#e8c44a').setFontWeight('bold');
+  row++;
+
+  // Header tabel
+  var colHdr = ['Seria', 'Sageti', 'X (dr/st)', 'Y (jos/sus)', 'Distanta', 'Directie eroare'];
+  sheet.getRange(row, 1, 1, colHdr.length).setValues([colHdr])
+       .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold')
+       .setHorizontalAlignment('center');
+  row++;
+
+  // Per serie
+  var allArrows = [];
+  ends.forEach(function(end, idx) {
+    var arrows = end.arrows || [];
+    allArrows = allArrows.concat(arrows);
+    var c = groupCenter(arrows);
+    if (!c) return;
+    var r = [end.endNumber || idx+1, c.count,
+             c.cx > 0 ? '+'+c.cx+' (dr)' : c.cx < 0 ? c.cx+' (st)' : '0',
+             c.cy > 0 ? '+'+c.cy+' (jos)' : c.cy < 0 ? c.cy+' (sus)' : '0',
+             c.dist, c.dir];
+    var dataRange = sheet.getRange(row, 1, 1, r.length);
+    dataRange.setValues([r]).setHorizontalAlignment('center');
+    if (idx % 2 === 0) {
+      dataRange.setBackground('#e8f0fe').setFontColor('#1a1a2e');
+    } else {
+      dataRange.setBackground('#ffffff').setFontColor('#1a1a2e');
+    }
+    row++;
+  });
+
+  // Total sesiune
+  var sc = groupCenter(allArrows);
+  if (sc) {
+    var totRow2 = ['SESIUNE', sc.count,
+      sc.cx > 0 ? '+'+sc.cx+' (dr)' : sc.cx < 0 ? sc.cx+' (st)' : '0',
+      sc.cy > 0 ? '+'+sc.cy+' (jos)' : sc.cy < 0 ? sc.cy+' (sus)' : '0',
+      sc.dist, sc.dir];
+    sheet.getRange(row, 1, 1, totRow2.length).setValues([totRow2])
+         .setBackground('#e8c44a').setFontColor('#111').setFontWeight('bold')
+         .setHorizontalAlignment('center');
+  }
+  sheet.setColumnWidth(6, 140);
+}
+
+// ── Formatare tabel săgeți: lățimi egale + grupare vizuală ──
+function formatArrowTable(sheet, headerRow, firstDataRow, lastDataRow, maxArrows) {
+  var totalRow = lastDataRow + 1;
+
+  // Coloana 1 (Seria) — mai lată, ușor de citit
+  sheet.setColumnWidth(1, 90);
+
+  // Pentru fiecare pereche Sg./Poz. — lățimi egale, fundal ușor diferit pt poziție
+  for (var i = 0; i < maxArrows; i++) {
+    var scoreCol = 2 + (i * 2);      // coloana scorului
+    var posCol   = scoreCol + 1;      // coloana poziției
+
+    sheet.setColumnWidth(scoreCol, 55);
+    sheet.setColumnWidth(posCol, 55);
+
+    // Fundal ușor diferit pentru coloana de poziție (să se distingă de scor)
+    var posRange = sheet.getRange(firstDataRow, posCol, lastDataRow - firstDataRow + 1, 1);
+    var existingBg = posRange.getBackgrounds();
+    var newBg = existingBg.map(function(row) {
+      return [shadeColor(row[0], -6)];
+    });
+    posRange.setBackgrounds(newBg);
+  }
+
+  // Bordură groasă ÎNTRE PERECHI (în stânga fiecărei coloane Sg., adică separă
+  // de perechea anterioară), fără bordură între Sg. și Poz. din aceeași pereche
+  for (var j = 0; j < maxArrows; j++) {
+    var scoreColB = 2 + (j * 2);
+    var leftBorderRange = sheet.getRange(headerRow, scoreColB, totalRow - headerRow + 1, 1);
+    leftBorderRange.setBorder(null, true, null, null, null, null, '#888888', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  }
+
+  // Coloana Total serie — lățime mai mare + bordură groasă în stânga
+  var totalCol = 2 + (maxArrows * 2);
+  sheet.setColumnWidth(totalCol, 90);
+  var totalColRange = sheet.getRange(headerRow, totalCol, totalRow - headerRow + 1, 1);
+  totalColRange.setBorder(null, true, null, null, null, null, '#888888', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
+  // Bordură exterioară completă pentru tot tabelul
+  var fullTable = sheet.getRange(headerRow, 1, totalRow - headerRow + 1, totalCol);
+  fullTable.setBorder(true, true, true, true, false, false, '#666666', SpreadsheetApp.BorderStyle.SOLID);
+}
+
+// ── Helper: ajustează luminozitatea unei culori hex ──────────
+function shadeColor(hex, percent) {
+  if (!hex || hex === '#ffffff' && percent > 0) hex = '#ffffff';
+  hex = (hex || '#ffffff').replace('#', '');
+  if (hex.length !== 6) return '#' + hex;
+  var r = parseInt(hex.substring(0,2), 16);
+  var g = parseInt(hex.substring(2,4), 16);
+  var b = parseInt(hex.substring(4,6), 16);
+  r = Math.min(255, Math.max(0, r + percent));
+  g = Math.min(255, Math.max(0, g + percent));
+  b = Math.min(255, Math.max(0, b + percent));
+  var toHex = function(n) { var s = n.toString(16); return s.length === 1 ? '0' + s : s; };
+  return '#' + toHex(r) + toHex(g) + toHex(b);
 }
 
 // ── Summary sheet all-time ────────────────────────────────
