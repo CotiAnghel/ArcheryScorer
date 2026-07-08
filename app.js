@@ -127,6 +127,7 @@ let sessions = [];
 let currentSession = null;
 let currentEndIndex = 0;
 let endArrows = [];           // arrows recorded in current end
+let editingArrowIndex = -1;   // -1 = adăugare nouă, >=0 = editare
 let googleConfig = { clientId: '', accessToken: '', userEmail: '' };
 let selectedSessionId = null;
 
@@ -135,6 +136,28 @@ function save() {
   localStorage.setItem('archery_bow', JSON.stringify(bowConfig));
   localStorage.setItem('archery_sessions', JSON.stringify(sessions));
   localStorage.setItem('archery_google', JSON.stringify(googleConfig));
+}
+
+function autosaveSession() {
+  if (!currentSession) return;
+  const draft = {
+    session: currentSession,
+    endArrows: endArrows,
+    currentEndIndex: currentEndIndex,
+    savedAt: new Date().toISOString()
+  };
+  localStorage.setItem('archery_draft', JSON.stringify(draft));
+}
+
+function clearDraft() {
+  localStorage.removeItem('archery_draft');
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem('archery_draft');
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
 }
 function load() {
   try { bowConfig = JSON.parse(localStorage.getItem('archery_bow')) || bowConfig; } catch(e){}
@@ -151,6 +174,12 @@ window.addEventListener('DOMContentLoaded', () => {
   renderHistory();
   renderGlobalStats();
   document.getElementById('origin-display').textContent = location.origin;
+
+  // Verifică dacă există o sesiune neterminată
+  const draft = loadDraft();
+  if (draft && draft.session) {
+    showDraftRecovery(draft);
+  }
 
   // Settings form
   document.getElementById('settings-bow-name').value = bowConfig.name || '';
@@ -329,8 +358,51 @@ function initSessionUI() {
   badge.textContent = currentSession.type === 'training' ? 'ANTRENAMENT' : 'CONCURS';
   badge.className = 'session-type-badge' + (currentSession.type === 'competition' ? ' comp' : '');
 
+  // Protecție back button Android — împinge o stare în history
+  history.pushState({ sessionActive: true }, '');
+
   updateSessionMeta();
   updateEndUI();
+}
+
+// Interceptează butonul Back când sesiunea e activă
+window.addEventListener('popstate', (e) => {
+  if (currentSession) {
+    // Re-împinge starea ca să blocăm ieșirea
+    history.pushState({ sessionActive: true }, '');
+    // Arată dialog de confirmare
+    showBackWarning();
+  }
+});
+
+function showBackWarning() {
+  // Arată toast + modal de confirmare
+  const existing = document.getElementById('back-warning-modal');
+  if (existing) { existing.classList.remove('hidden'); return; }
+
+  const modal = document.createElement('div');
+  modal.id = 'back-warning-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">⚠ Sesiune activă</div>
+      <p style="font-size:.88rem;color:var(--text-muted);line-height:1.5">
+        Ai o sesiune de antrenament în desfășurare.<br>
+        Dacă ieși, datele nesalvate se pierd.
+      </p>
+      <div class="modal-actions" style="justify-content:space-between">
+        <button class="btn-danger-sm" onclick="forceExitSession()">Abandon sesiune</button>
+        <button class="btn-primary" onclick="document.getElementById('back-warning-modal').classList.add('hidden')">
+          ← Continuă antrenamentul
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function forceExitSession() {
+  document.getElementById('back-warning-modal')?.classList.add('hidden');
+  cancelSession(false);
 }
 
 function updateSessionMeta() {
@@ -395,6 +467,9 @@ function updateEndUI() {
 
   document.getElementById('btn-finish-session').disabled = currentSession.ends.length === 0;
   document.getElementById('btn-prev-end').style.display = currentEndIndex > 0 ? 'block' : 'none';
+
+  // Autosave draft la fiecare modificare
+  autosaveSession();
 }
 
 function renderEndArrows(ape) {
@@ -405,9 +480,12 @@ function renderEndArrows(ape) {
   for (let i = 0; i < count; i++) {
     const a = endArrows[i];
     if (a) {
-      html += `<div class="arrow-chip ${scoreClass(a.score)}">
+      const editing = editingArrowIndex === i;
+      html += `<div class="arrow-chip ${scoreClass(a.score)}${editing ? ' editing' : ''}"
+        onclick="editArrow(${i})" title="Click pentru editare">
         <span>${a.score}</span>
-        <span class="chip-pos">${a.position ? `${a.position}h` : ''}</span>
+        <span class="chip-pos">${a.position ? `${a.position}h` : '—'}</span>
+        ${editing ? '<span class="chip-edit-indicator">✎</span>' : ''}
       </div>`;
     } else if (!freeForm) {
       html += `<div class="arrow-chip pending">${i + 1}</div>`;
@@ -415,9 +493,38 @@ function renderEndArrows(ape) {
   }
   // Free-form: arată un chip placeholder pentru săgeata următoare
   if (freeForm) {
-    html += `<div class="arrow-chip pending">+</div>`;
+    html += `<div class="arrow-chip pending" onclick="cancelEdit()" title="Adaugă săgeată nouă">+</div>`;
   }
   container.innerHTML = html;
+
+  // Actualizează label buton în funcție de mod
+  const addBtn = document.getElementById('btn-add-arrow');
+  if (editingArrowIndex >= 0) {
+    addBtn.textContent = `✎ Modifică Sg.${editingArrowIndex + 1}`;
+    addBtn.style.background = '#7e22ce';
+  } else {
+    addBtn.textContent = '➤ Adaugă';
+    addBtn.style.background = '';
+  }
+}
+
+function editArrow(index) {
+  const a = endArrows[index];
+  if (!a) return;
+  editingArrowIndex = index;
+  // Populează câmpurile cu valorile existente
+  document.getElementById('arrow-score').value = a.score;
+  document.getElementById('arrow-position').value = a.position || '';
+  document.getElementById('arrow-score').focus();
+  renderEndArrows(currentArrowsPerEnd() === Infinity ? endArrows.length + 1 : currentArrowsPerEnd());
+  toast(`Editezi săgeata ${index + 1} — modifică și apasă Modifică`, '');
+}
+
+function cancelEdit() {
+  editingArrowIndex = -1;
+  document.getElementById('arrow-score').value = '';
+  document.getElementById('arrow-position').value = '';
+  renderEndArrows(currentArrowsPerEnd() === Infinity ? endArrows.length + 1 : currentArrowsPerEnd());
 }
 
 function updateEndSummary() {
@@ -448,14 +555,27 @@ function addArrow() {
   const score = scoreEl.value;
   if (!score) { toast('Selectează un punctaj!'); scoreEl.focus(); return; }
 
+  const pos = parseInt(posEl.value) || null;
+  if (posEl.value && (pos < 1 || pos > 12)) { toast('Poziția trebuie să fie 1–12!'); posEl.focus(); return; }
+
+  if (editingArrowIndex >= 0) {
+    // Mod editare — înlocuiește săgeata existentă
+    endArrows[editingArrowIndex] = { score, position: pos };
+    editingArrowIndex = -1;
+    scoreEl.value = '';
+    posEl.value = '';
+    scoreEl.focus();
+    updateEndUI();
+    toast('Săgeată modificată ✓', 'success');
+    return;
+  }
+
+  // Mod adăugare normală
   const freeFormAdd = currentSession && currentSession.config.arrowsPerEnd === 0;
   if (!freeFormAdd) {
     const ape = currentArrowsPerEnd();
     if (endArrows.length >= ape) { toast('Seria este completă! Salvează și treci la seria nouă.'); return; }
   }
-
-  const pos = parseInt(posEl.value) || null;
-  if (posEl.value && (pos < 1 || pos > 12)) { toast('Poziția trebuie să fie 1–12!'); posEl.focus(); return; }
 
   endArrows.push({ score, position: pos });
   scoreEl.value = '';
@@ -484,6 +604,7 @@ function confirmEnd() {
   });
 
   endArrows = [];
+  editingArrowIndex = -1;
   currentEndIndex++;
 
   // Pentru concurs cu număr fix de serii
@@ -523,6 +644,7 @@ function finishSession() {
 
   sessions.unshift(currentSession);
   save();
+  clearDraft();
 
   const saved = currentSession;
   cancelSession(false);
@@ -536,9 +658,11 @@ function finishSession() {
 
 function cancelSession(withConfirm = true) {
   if (withConfirm && !confirm('Anulezi sesiunea curentă? Datele se pierd.')) return;
+  clearDraft();
   currentSession = null;
   currentEndIndex = 0;
   endArrows = [];
+  editingArrowIndex = -1;
   document.querySelector('.session-chooser').classList.remove('hidden');
   document.getElementById('active-session').classList.add('hidden');
   document.getElementById('btn-confirm-end').textContent = '✓ Confirmă seria';
@@ -1095,6 +1219,82 @@ async function syncAllPending() {
 function updateGoogleStatus() {
   loadScriptConfig();
   updateSyncStatusBar();
+}
+
+// ── Draft Recovery ────────────────────────────────────────
+function showDraftRecovery(draft) {
+  const session = draft.session;
+  const date = new Date(session.date);
+  const dateStr = date.toLocaleDateString('ro-RO');
+  const timeStr = date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  const savedAt = new Date(draft.savedAt);
+  const savedStr = savedAt.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  const type = session.type === 'training' ? 'Antrenament' : 'Concurs';
+  const dist = session.config?.distance ? ` · ${session.config.distance}m` : '';
+  const ends = session.ends?.length || 0;
+  const arrowsInProgress = draft.endArrows?.length || 0;
+
+  const modal = document.createElement('div');
+  modal.id = 'modal-draft-recovery';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">📋 Sesiune neterminată</div>
+      <div class="draft-info">
+        <div class="draft-row">
+          <span class="draft-label">Tip</span>
+          <span class="draft-value">${type}</span>
+        </div>
+        <div class="draft-row">
+          <span class="draft-label">Arc</span>
+          <span class="draft-value">${session.bow?.name || '—'}${dist}</span>
+        </div>
+        <div class="draft-row">
+          <span class="draft-label">Data</span>
+          <span class="draft-value">${dateStr} ${timeStr}</span>
+        </div>
+        <div class="draft-row">
+          <span class="draft-label">Serii salvate</span>
+          <span class="draft-value">${ends} serii complete</span>
+        </div>
+        ${arrowsInProgress > 0 ? `
+        <div class="draft-row">
+          <span class="draft-label">În progres</span>
+          <span class="draft-value">${arrowsInProgress} săgeți în seria curentă</span>
+        </div>` : ''}
+        <div class="draft-row">
+          <span class="draft-label">Salvat la</span>
+          <span class="draft-value">${savedStr}</span>
+        </div>
+      </div>
+      <p class="draft-hint">Vrei să continui această sesiune sau să o abandonezi?</p>
+      <div class="modal-actions" style="justify-content:space-between">
+        <button class="btn-danger-sm" onclick="abandonDraft()">🗑 Abandonează</button>
+        <button class="btn-primary" onclick="resumeDraft()">▶ Continuă sesiunea</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function resumeDraft() {
+  const draft = loadDraft();
+  if (!draft) return;
+  document.getElementById('modal-draft-recovery')?.remove();
+
+  currentSession = draft.session;
+  currentEndIndex = draft.currentEndIndex || 0;
+  endArrows = draft.endArrows || [];
+  editingArrowIndex = -1;
+
+  initSessionUI();
+  toast('Sesiune reluată ✓', 'success');
+}
+
+function abandonDraft() {
+  if (!confirm('Abandonezi sesiunea neterminată? Datele se pierd definitiv.')) return;
+  clearDraft();
+  document.getElementById('modal-draft-recovery')?.remove();
+  toast('Sesiune abandonată');
 }
 
 // ── PWA Install ───────────────────────────────────────────

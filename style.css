@@ -945,3 +945,57 @@ html, body {
   font-style: italic;
   padding: 0.5rem 0;
 }
+
+/* ── Arrow chip editare ── */
+.arrow-chip {
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s;
+}
+.arrow-chip:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(255,255,255,.2);
+}
+.arrow-chip.editing {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 10px rgba(168,85,247,.6);
+  transform: scale(1.08);
+}
+.chip-edit-indicator {
+  font-size: 0.6rem;
+  color: #a855f7;
+  display: block;
+  line-height: 1;
+}
+
+/* ── Draft Recovery Modal ── */
+.draft-info {
+  background: var(--bg3);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.draft-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.83rem;
+}
+.draft-label {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: .04em;
+}
+.draft-value {
+  color: var(--text);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.draft-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+}
