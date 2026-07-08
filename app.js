@@ -111,7 +111,9 @@ const WA_COMPETITIONS = [
 function scoreClass(s) {
   if (s === 'X' || s === '10' || s === '9') return 'gold';
   if (s === '8' || s === '7') return 'red';
-  if (s === '6' || s === '5' || s === '4') return 'blue';
+  if (s === '6' || s === '5') return 'blue';
+  if (s === '4' || s === '3') return 'black';
+  if (s === '2' || s === '1') return 'white';
   if (s === 'M') return 'miss';
   return '';
 }
@@ -147,6 +149,9 @@ function autosaveSession() {
     savedAt: new Date().toISOString()
   };
   localStorage.setItem('archery_draft', JSON.stringify(draft));
+  // Refresh Istoric dacă e vizibil
+  const histTab = document.getElementById('tab-history');
+  if (histTab && histTab.classList.contains('active')) renderHistory();
 }
 
 function clearDraft() {
@@ -680,13 +685,37 @@ function renderHistory() {
   const filter = document.getElementById('filter-type')?.value || 'all';
   const list = document.getElementById('history-list');
   const filtered = sessions.filter(s => filter === 'all' || s.type === filter);
+  const draft = loadDraft();
 
-  if (!filtered.length) {
+  // Draft item
+  let draftHtml = '';
+  if (draft && draft.session && !currentSession) {
+    const s = draft.session;
+    const date = new Date(s.date).toLocaleDateString('ro-RO');
+    const time = new Date(s.date).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+    const savedAt = new Date(draft.savedAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+    const dist = s.config?.distance ? `${s.config.distance}m · ` : '';
+    const ends = s.ends?.length || 0;
+    const inProgress = draft.endArrows?.length || 0;
+    draftHtml = `<div class="history-item draft-item" onclick="resumeFromHistory()">
+      <div class="history-item-icon">⏸️</div>
+      <div class="history-item-info">
+        <div class="history-item-title">
+          <span class="draft-badge">ÎN CURS</span>
+          ${s.bow?.name || '—'} · ${date} ${time}
+        </div>
+        <div class="history-item-sub">${dist}${ends} serii complete${inProgress > 0 ? ` · ${inProgress} sg. în progres` : ''} · salvat ${savedAt}</div>
+      </div>
+      <div class="history-item-score draft-score">▶</div>
+    </div>`;
+  }
+
+  if (!filtered.length && !draftHtml) {
     list.innerHTML = `<div class="history-empty">Nicio sesiune înregistrată încă.<br>Apasă 🎯 Sesiune pentru a începe.</div>`;
     return;
   }
 
-  list.innerHTML = filtered.map(s => {
+  list.innerHTML = draftHtml + filtered.map(s => {
     const date = new Date(s.date).toLocaleDateString('ro-RO');
     const time = new Date(s.date).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
     const icon = s.type === 'training' ? '🏋️' : '🏆';
@@ -703,6 +732,24 @@ function renderHistory() {
       <div class="history-item-score">${s.totalScore ?? '—'}</div>
     </div>`;
   }).join('');
+}
+
+function resumeFromHistory() {
+  const draft = loadDraft();
+  if (!draft) return;
+  // Dacă e o sesiune activă, avertizează
+  if (currentSession) {
+    toast('Finalizează mai întâi sesiunea curentă!');
+    return;
+  }
+  // Treci la tab-ul Home și reia sesiunea
+  switchTab('home');
+  currentSession = draft.session;
+  currentEndIndex = draft.currentEndIndex || 0;
+  endArrows = draft.endArrows || [];
+  editingArrowIndex = -1;
+  initSessionUI();
+  toast('Sesiune reluată ✓', 'success');
 }
 
 function openSessionDetail(id) {
