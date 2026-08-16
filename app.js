@@ -1065,58 +1065,114 @@ function renderGraphicTarget() {
     return el;
   };
 
-  // Inele de la exterior spre interior
-  // ring=1 → exterior, 1pt, ALB; ring=10 → interior, 10pt, GALBEN
-  // Colorare: 1-2=alb, 3-4=negru, 5-6=albastru, 7-8=roșu, 9-10=galben
-  const ringFill = (ring) => {
-    if (ring <= 2) return '#f0f0f0';   // ALB (1-2)
-    if (ring <= 4) return '#1a1a1a';   // NEGRU (3-4)
-    if (ring <= 6) return '#2563eb';   // ALBASTRU (5-6)
-    if (ring <= 8) return '#dc2626';   // ROȘU (7-8)
-    return '#fbbf24';                   // GALBEN (9-10)
+  // ── Culorile inelelor după SCOR (nu după index de desenare!)
+  // Scor 9-10 = galben, 7-8 = roșu, 5-6 = albastru, 3-4 = negru, 1-2 = alb
+  // ring=1 este EXTERIOR (1pt), ring=10 este INTERIOR (10pt)
+  // Raza exterioară a inelului cu scor S = rw * (11 - S)
+  // Deci desenăm inele de la scor=1 (cel mai mare cerc) la scor=10 (cel mai mic)
+  const scoreToFill = (score) => {
+    if (score >= 9) return '#fbbf24'; // galben (9,10)
+    if (score >= 7) return '#dc2626'; // roșu   (7,8)
+    if (score >= 5) return '#2563eb'; // albastru(5,6)
+    if (score >= 3) return '#1a1a1a'; // negru   (3,4)
+    return '#f0f0f0';                  // alb     (1,2)
+  };
+  const scoreToBorder = (score) => {
+    if (score >= 9) return '#d97706';
+    if (score >= 7) return '#991b1b';
+    if (score >= 5) return '#1d4ed8';
+    if (score >= 3) return '#444';
+    return '#bbb';
   };
 
-  // Desenăm de la exterior (ring=10, cel mai mare) spre interior (ring=1, cel mai mic)
-  for (let ring = 10; ring >= 1; ring--) {
-    const rPx = Math.min(rw * ring * scale, maxR);
+  // Desenăm de la exterior (scor 1, cerc mare) spre interior (scor 10, cerc mic)
+  for (let score = 1; score <= 10; score++) {
+    const outerRadiusMm = rw * (11 - score); // mm
+    const rPx = Math.min(outerRadiusMm * scale, maxR);
     svg.appendChild(mk('circle', {
       cx: CX, cy: CY, r: rPx,
-      fill: ringFill(ring),
-      stroke: '#88888866',
-      'stroke-width': ring % 2 === 0 ? '1.2' : '0.4'
+      fill: scoreToFill(score),
+      stroke: scoreToBorder(score),
+      'stroke-width': score % 2 === 0 ? '1.2' : '0.4'
     }));
   }
 
-  // X-ring (interior, mai deschis decât galbenul de 10)
+  // X-ring (interior față de inelul 10, galben mai deschis)
   svg.appendChild(mk('circle', {
-    cx: CX, cy: CY, r: (rw/2)*scale,
-    fill: '#fde68a', stroke: '#ccc', 'stroke-width': '0.8'
+    cx: CX, cy: CY, r: (rw / 2) * scale,
+    fill: '#fde68a', stroke: '#d97706', 'stroke-width': '1'
   }));
 
-  // Crosshair
-  svg.appendChild(mk('line', { x1:CX-maxR,y1:CY,x2:CX+maxR,y2:CY, stroke:'rgba(0,0,0,0.12)','stroke-width':'0.7' }));
-  svg.appendChild(mk('line', { x1:CX,y1:CY-maxR,x2:CX,y2:CY+maxR, stroke:'rgba(0,0,0,0.12)','stroke-width':'0.7' }));
+  // Crosshair (linii fine)
+  svg.appendChild(mk('line', { x1:CX-maxR,y1:CY,x2:CX+maxR,y2:CY, stroke:'rgba(0,0,0,0.15)','stroke-width':'0.6' }));
+  svg.appendChild(mk('line', { x1:CX,y1:CY-maxR,x2:CX,y2:CY+maxR, stroke:'rgba(0,0,0,0.15)','stroke-width':'0.6' }));
 
   // Săgețile deja înregistrate în seria curentă
-  endArrows.forEach((a, i) => {
+  endArrows.forEach((a) => {
     if (a.xMm === undefined) return;
     const px = CX + a.xMm * scale;
     const py = CY + a.yMm * scale;
-    svg.appendChild(mk('circle', { cx:px, cy:py, r:5, fill:arrowDotColor(a.score), stroke:'#fff','stroke-width':'1.5',opacity:'0.92' }));
-    const t = mk('text', { x:px+7, y:py+4, fill:'#fff','font-size':'8','font-family':'monospace','font-weight':'bold' });
+    svg.appendChild(mk('circle', { cx:px, cy:py, r:5, fill:arrowDotColor(a.score), stroke:'#fff','stroke-width':'1.5',opacity:'0.95' }));
+    const t = mk('text', { x:px+7, y:py+4, fill:'#fff','font-size':'8','font-family':'monospace','font-weight':'bold','text-shadow':'0 0 2px #000' });
     t.textContent = a.score;
     svg.appendChild(t);
   });
 
-  // Preview dot (urmărire cursor/touch)
-  svg.appendChild(mk('circle', { id:'preview-dot', cx:-50, cy:-50, r:7, fill:'none', stroke:'rgba(255,255,255,0.7)','stroke-width':'2','pointer-events':'none' }));
+  // Preview dot
+  svg.appendChild(mk('circle', { id:'preview-dot', cx:-50, cy:-50, r:7,
+    fill:'none', stroke:'rgba(255,255,255,0.8)','stroke-width':'2','pointer-events':'none' }));
 
-  // ── Event handlers ──
+  // ── Zoom canvas (mini target amplificat la poziția cursorului) ──
+  const ZOOM_SIZE = 80;
+  const ZOOM_FACTOR = 4;
+  const zoomEl = document.getElementById('graphic-zoom-canvas');
+
   const getXY = (e) => {
     const rect = svg.getBoundingClientRect();
     const sx = SVG / rect.width, sy = SVG / rect.height;
     const src = e.touches ? e.touches[0] : e.changedTouches ? e.changedTouches[0] : e;
     return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
+  };
+
+  const updateZoom = (svgX, svgY) => {
+    if (!zoomEl) return;
+    // Ridensenează zoom-ul centrat pe poziția cursorului
+    const zc = ZOOM_SIZE / 2;
+    const zScale = scale * ZOOM_FACTOR;
+
+    let zSvg = `<svg width="${ZOOM_SIZE}" height="${ZOOM_SIZE}" viewBox="0 0 ${ZOOM_SIZE} ${ZOOM_SIZE}">`;
+    // Offset față de centrul țintei
+    const offX = svgX - CX;
+    const offY = svgY - CY;
+    // Desenăm inelele relative la poziția cursorului
+    for (let score = 1; score <= 10; score++) {
+      const rMm = rw * (11 - score);
+      const rPx = rMm * zScale;
+      const cx2 = zc - offX * ZOOM_FACTOR;
+      const cy2 = zc - offY * ZOOM_FACTOR;
+      zSvg += `<circle cx="${cx2}" cy="${cy2}" r="${rPx}" fill="${scoreToFill(score)}" stroke="${scoreToBorder(score)}" stroke-width="${score%2===0?'1.5':'0.5'}"/>`;
+    }
+    // X-ring
+    zSvg += `<circle cx="${zc - offX*ZOOM_FACTOR}" cy="${zc - offY*ZOOM_FACTOR}" r="${(rw/2)*zScale}" fill="#fde68a" stroke="#d97706" stroke-width="1"/>`;
+    // Crosshair la centrul țintei
+    const tcx = zc - offX * ZOOM_FACTOR;
+    const tcy = zc - offY * ZOOM_FACTOR;
+    zSvg += `<line x1="${tcx-30}" y1="${tcy}" x2="${tcx+30}" y2="${tcy}" stroke="rgba(0,0,0,0.2)" stroke-width="0.5"/>`;
+    zSvg += `<line x1="${tcx}" y1="${tcy-30}" x2="${tcx}" y2="${tcy+30}" stroke="rgba(0,0,0,0.2)" stroke-width="0.5"/>`;
+    // Cursor (crosshair roșu la poziția curentă)
+    zSvg += `<line x1="${zc-10}" y1="${zc}" x2="${zc+10}" y2="${zc}" stroke="#fff" stroke-width="1.5"/>`;
+    zSvg += `<line x1="${zc}" y1="${zc-10}" x2="${zc}" y2="${zc+10}" stroke="#fff" stroke-width="1.5"/>`;
+    zSvg += `<circle cx="${zc}" cy="${zc}" r="3" fill="none" stroke="#fff" stroke-width="1.2"/>`;
+    // Săgețile existente în zoom
+    endArrows.forEach(a => {
+      if (a.xMm === undefined) return;
+      const apx = (zc - offX*ZOOM_FACTOR) + a.xMm * zScale;
+      const apy = (zc - offY*ZOOM_FACTOR) + a.yMm * zScale;
+      zSvg += `<circle cx="${apx}" cy="${apy}" r="3" fill="${arrowDotColor(a.score)}" stroke="#fff" stroke-width="1"/>`;
+    });
+    zSvg += '</svg>';
+    zoomEl.innerHTML = zSvg;
+    zoomEl.classList.remove('hidden');
   };
 
   const handleImpact = (svgX, svgY) => {
@@ -1128,22 +1184,35 @@ function renderGraphicTarget() {
     addArrowGraphic(score, hour, dxMm, dyMm, distMm);
   };
 
-  svg.addEventListener('click', e => { const {x,y} = getXY(e); handleImpact(x,y); });
+  svg.addEventListener('click', e => {
+    const {x,y} = getXY(e);
+    handleImpact(x,y);
+  });
+
   svg.addEventListener('mousemove', e => {
     const {x,y} = getXY(e);
     const d = svg.querySelector('#preview-dot');
     if(d){d.setAttribute('cx',x);d.setAttribute('cy',y);}
+    updateZoom(x, y);
   });
+
+  svg.addEventListener('mouseleave', () => {
+    if(zoomEl) zoomEl.classList.add('hidden');
+  });
+
   svg.addEventListener('touchmove', e => {
     e.preventDefault();
     const {x,y} = getXY(e);
     const d = svg.querySelector('#preview-dot');
     if(d){d.setAttribute('cx',x);d.setAttribute('cy',y);}
+    updateZoom(x, y);
   }, { passive:false });
+
   svg.addEventListener('touchend', e => {
     e.preventDefault();
     const {x,y} = getXY(e);
     handleImpact(x,y);
+    if(zoomEl) setTimeout(() => zoomEl.classList.add('hidden'), 800);
   });
 
   container.innerHTML = '';
@@ -1151,7 +1220,7 @@ function renderGraphicTarget() {
 
   const lbl = document.createElement('div');
   lbl.className = 'graphic-target-label';
-  lbl.textContent = `${spec.name} · inel = ${rw.toFixed(0)}mm lățime`;
+  lbl.textContent = `${spec.name} · inel = ${rw.toFixed(0)}mm`;
   container.appendChild(lbl);
 }
 

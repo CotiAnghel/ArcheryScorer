@@ -135,8 +135,14 @@
 
           <!-- MOD GRAFIC -->
           <div id="graphic-input-section" class="hidden">
-            <div id="graphic-target-canvas" class="graphic-target-canvas"></div>
-            <p class="graphic-hint">Click / tap pe țintă pentru a înregistra impactul</p>
+            <div class="graphic-target-wrap">
+              <div id="graphic-target-canvas" class="graphic-target-canvas"></div>
+              <div class="graphic-zoom-wrap">
+                <div id="graphic-zoom-canvas" class="graphic-zoom-canvas hidden"></div>
+                <div class="zoom-label">🔍 Zoom ×4</div>
+              </div>
+            </div>
+            <p class="graphic-hint">Click / tap pe țintă · Zoom apare la mișcare</p>
           </div>
 
           <div class="end-summary" id="end-summary"></div>
