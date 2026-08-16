@@ -611,6 +611,8 @@ function confirmEnd() {
   endArrows = [];
   editingArrowIndex = -1;
   currentEndIndex++;
+  // Refresh ținta grafică pentru seria nouă
+  if (graphicInputMode) setTimeout(() => renderGraphicTarget(), 0);
 
   // Pentru concurs cu număr fix de serii
   if (!freeForm) {
@@ -967,6 +969,188 @@ function renderCentrajSection(session, containerId) {
         </div>
       </div>
     </div>`;
+}
+
+
+// ── Mod grafic input săgeți ────────────────────────────────
+
+const TARGET_SPECS = {
+  '40cm_10ring_indoor':  { name: '40cm 10 zone indoor', diameter: 400, rings: 10 },
+  '40cm_5ring_indoor':   { name: '40cm 5 zone compound',diameter: 400, rings: 5  },
+  '60cm_indoor':         { name: '60cm indoor',         diameter: 600, rings: 10 },
+  '80cm_10ring':         { name: '80cm 10 zone',        diameter: 800, rings: 10 },
+  '80cm_6ring_compound': { name: '80cm 6 zone compound',diameter: 480, rings: 6  },
+  '80cm_X_compound':     { name: '80cm X10 compound',   diameter: 800, rings: 10 },
+  '122cm_10ring':        { name: '122cm 10 zone',       diameter: 1220,rings: 10 },
+  '122cm_5ring':         { name: '122cm 5 zone',        diameter: 1220,rings: 5  },
+  'field_60cm':          { name: '60cm Field',          diameter: 600, rings: 6  },
+  'field_80cm':          { name: '80cm Field',          diameter: 800, rings: 6  },
+  '3d_waf':              { name: '3D WAF',              diameter: 400, rings: 5  },
+};
+
+// Culori inele (index 0=inel 1pt exterior ... 9=inel 10pt interior)
+const RING_COLORS_OUTER = ['#f5f5f5','#f5f5f5','#222222','#222222','#2563eb','#2563eb',
+                            '#dc2626','#dc2626','#fbbf24','#fbbf24'];
+
+let graphicInputMode = false;
+
+function getTargetSpec() {
+  const key = currentSession?.config?.target;
+  return (key && TARGET_SPECS[key]) ? TARGET_SPECS[key] : TARGET_SPECS['122cm_10ring'];
+}
+
+function mmToScore(distMm, spec) {
+  const rw = spec.diameter / 20; // lățimea unui inel în mm
+  if (distMm <= rw / 2) return 'X';
+  for (let ring = 1; ring <= 10; ring++) {
+    if (distMm <= rw * ring) return String(ring);
+  }
+  return 'M';
+}
+
+function xyToHour(x, y) {
+  // x+ dreapta, y- sus; ora 12 = sus, 3 = dreapta, 6 = jos, 9 = stânga
+  const angleDeg = (Math.atan2(x, -y) * 180 / Math.PI + 360) % 360;
+  return Math.round(angleDeg / 30) % 12 || 12;
+}
+
+function arrowDotColor(score) {
+  if (score === 'X' || score === '10' || score === '9') return '#e8c44a';
+  if (score === '8' || score === '7') return '#dc2626';
+  if (score === '6' || score === '5') return '#3b82f6';
+  if (score === '4' || score === '3') return '#555';
+  if (score === '2' || score === '1') return '#e5e5e5';
+  return '#888';
+}
+
+function toggleInputMode() {
+  graphicInputMode = !graphicInputMode;
+  const btn = document.getElementById('btn-toggle-mode');
+  if (btn) {
+    btn.textContent = graphicInputMode ? '🔢 Mod numeric' : '🎯 Mod grafic';
+  }
+  document.getElementById('numeric-input-section')?.classList.toggle('hidden', graphicInputMode);
+  const gs = document.getElementById('graphic-input-section');
+  if (gs) {
+    gs.classList.toggle('hidden', !graphicInputMode);
+    if (graphicInputMode) renderGraphicTarget();
+  }
+}
+
+function renderGraphicTarget() {
+  const container = document.getElementById('graphic-target-canvas');
+  if (!container) return;
+
+  const spec = getTargetSpec();
+  const rw = spec.diameter / 20; // mm per inel
+  const SVG = 280;
+  const CX = SVG / 2, CY = SVG / 2;
+  const maxR = 128; // px raza exterioară
+  const scale = maxR / (spec.diameter / 2); // px per mm
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', SVG); svg.setAttribute('height', SVG);
+  svg.setAttribute('viewBox', `0 0 ${SVG} ${SVG}`);
+  svg.style.cssText = 'cursor:crosshair;touch-action:none;user-select:none;display:block;margin:0 auto;';
+
+  const mk = (tag, attrs) => {
+    const el = document.createElementNS(ns, tag);
+    Object.entries(attrs).forEach(([k,v]) => el.setAttribute(k,v));
+    return el;
+  };
+
+  // Inele de la exterior spre interior
+  for (let ring = 10; ring >= 1; ring--) {
+    const rPx = Math.min(rw * ring * scale, maxR);
+    const ci = ring - 1; // 0=1pt...9=10pt
+    svg.appendChild(mk('circle', {
+      cx: CX, cy: CY, r: rPx,
+      fill: RING_COLORS_OUTER[ci],
+      stroke: '#55555580',
+      'stroke-width': ring % 2 === 0 ? '1.2' : '0.4'
+    }));
+  }
+
+  // X-ring
+  svg.appendChild(mk('circle', {
+    cx: CX, cy: CY, r: (rw/2)*scale,
+    fill: '#fde68a', stroke: '#bbb', 'stroke-width': '0.5'
+  }));
+
+  // Crosshair
+  svg.appendChild(mk('line', { x1:CX-maxR,y1:CY,x2:CX+maxR,y2:CY, stroke:'rgba(0,0,0,0.12)','stroke-width':'0.7' }));
+  svg.appendChild(mk('line', { x1:CX,y1:CY-maxR,x2:CX,y2:CY+maxR, stroke:'rgba(0,0,0,0.12)','stroke-width':'0.7' }));
+
+  // Săgețile deja înregistrate în seria curentă
+  endArrows.forEach((a, i) => {
+    if (a.xMm === undefined) return;
+    const px = CX + a.xMm * scale;
+    const py = CY + a.yMm * scale;
+    svg.appendChild(mk('circle', { cx:px, cy:py, r:5, fill:arrowDotColor(a.score), stroke:'#fff','stroke-width':'1.5',opacity:'0.92' }));
+    const t = mk('text', { x:px+7, y:py+4, fill:'#fff','font-size':'8','font-family':'monospace','font-weight':'bold' });
+    t.textContent = a.score;
+    svg.appendChild(t);
+  });
+
+  // Preview dot (urmărire cursor/touch)
+  svg.appendChild(mk('circle', { id:'preview-dot', cx:-50, cy:-50, r:7, fill:'none', stroke:'rgba(255,255,255,0.7)','stroke-width':'2','pointer-events':'none' }));
+
+  // ── Event handlers ──
+  const getXY = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const sx = SVG / rect.width, sy = SVG / rect.height;
+    const src = e.touches ? e.touches[0] : e.changedTouches ? e.changedTouches[0] : e;
+    return { x: (src.clientX - rect.left) * sx, y: (src.clientY - rect.top) * sy };
+  };
+
+  const handleImpact = (svgX, svgY) => {
+    const dxMm = (svgX - CX) / scale;
+    const dyMm = (svgY - CY) / scale;
+    const distMm = Math.sqrt(dxMm*dxMm + dyMm*dyMm);
+    const score = mmToScore(distMm, spec);
+    const hour = xyToHour(dxMm, dyMm);
+    addArrowGraphic(score, hour, dxMm, dyMm, distMm);
+  };
+
+  svg.addEventListener('click', e => { const {x,y} = getXY(e); handleImpact(x,y); });
+  svg.addEventListener('mousemove', e => {
+    const {x,y} = getXY(e);
+    const d = svg.querySelector('#preview-dot');
+    if(d){d.setAttribute('cx',x);d.setAttribute('cy',y);}
+  });
+  svg.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const {x,y} = getXY(e);
+    const d = svg.querySelector('#preview-dot');
+    if(d){d.setAttribute('cx',x);d.setAttribute('cy',y);}
+  }, { passive:false });
+  svg.addEventListener('touchend', e => {
+    e.preventDefault();
+    const {x,y} = getXY(e);
+    handleImpact(x,y);
+  });
+
+  container.innerHTML = '';
+  container.appendChild(svg);
+
+  const lbl = document.createElement('div');
+  lbl.className = 'graphic-target-label';
+  lbl.textContent = `${spec.name} · inel = ${rw.toFixed(0)}mm lățime`;
+  container.appendChild(lbl);
+}
+
+function addArrowGraphic(score, hour, xMm, yMm, distMm) {
+  const freeFormAdd = currentSession && currentSession.config.arrowsPerEnd === 0;
+  if (!freeFormAdd) {
+    const ape = currentArrowsPerEnd();
+    if (endArrows.length >= ape) { toast('Seria completă! Salvează seria.'); return; }
+  }
+  endArrows.push({ score, position: hour,
+    xMm: +xMm.toFixed(1), yMm: +yMm.toFixed(1), distMm: +distMm.toFixed(1) });
+  renderGraphicTarget();
+  updateEndUI();
+  toast(`Sg.${endArrows.length}: ${score} · ora ${hour} · ${distMm.toFixed(0)}mm față de centru`, 'success');
 }
 
 // ── Export Excel ───────────────────────────────────────

@@ -1029,3 +1029,49 @@ html, body {
   font-size: 1.4rem !important;
   font-family: var(--font-body) !important;
 }
+
+/* ── Mod grafic input ── */
+.mode-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.4rem;
+}
+.btn-toggle-mode {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  cursor: pointer;
+  letter-spacing: .04em;
+  transition: background .2s;
+}
+.btn-toggle-mode:hover { background: rgba(232,196,74,.12); }
+
+.graphic-target-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+.graphic-target-canvas svg {
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(0,0,0,.5);
+}
+.graphic-target-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 0.4rem;
+  letter-spacing: .04em;
+}
+.graphic-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 0.3rem;
+  font-style: italic;
+}

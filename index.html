@@ -90,36 +90,53 @@
 
         <!-- Arrow input grid -->
         <div class="arrow-input-section">
+          <!-- Chips săgeți curente -->
           <div class="current-end-display">
             <div class="end-arrows" id="end-arrows-display"></div>
           </div>
 
-          <div class="score-input-row">
-            <div class="input-group-inline">
-              <label class="input-label">Punctaj</label>
-              <select id="arrow-score" class="score-select">
-                <option value="">—</option>
-                <option value="X">X (10*)</option>
-                <option value="10">10</option>
-                <option value="9">9</option>
-                <option value="8">8</option>
-                <option value="7">7</option>
-                <option value="6">6</option>
-                <option value="5">5</option>
-                <option value="4">4</option>
-                <option value="3">3</option>
-                <option value="2">2</option>
-                <option value="1">1</option>
-                <option value="M">M (Rateu)</option>
-              </select>
-            </div>
-            <div class="input-group-inline">
-              <label class="input-label">Poziție (oră)</label>
-              <input type="number" id="arrow-position" class="pos-input" min="1" max="12" placeholder="1–12" />
-            </div>
-            <button class="btn-add-arrow" id="btn-add-arrow" onclick="addArrow()">
-              ➤ Adaugă
+          <!-- Toggle mod input -->
+          <div class="mode-toggle-row">
+            <button class="btn-toggle-mode" id="btn-toggle-mode" onclick="toggleInputMode()">
+              🎯 Mod grafic
             </button>
+          </div>
+
+          <!-- MOD NUMERIC -->
+          <div id="numeric-input-section">
+            <div class="score-input-row">
+              <div class="input-group-inline">
+                <label class="input-label">Punctaj</label>
+                <select id="arrow-score" class="score-select">
+                  <option value="">—</option>
+                  <option value="X">X (10*)</option>
+                  <option value="10">10</option>
+                  <option value="9">9</option>
+                  <option value="8">8</option>
+                  <option value="7">7</option>
+                  <option value="6">6</option>
+                  <option value="5">5</option>
+                  <option value="4">4</option>
+                  <option value="3">3</option>
+                  <option value="2">2</option>
+                  <option value="1">1</option>
+                  <option value="M">M (Rateu)</option>
+                </select>
+              </div>
+              <div class="input-group-inline">
+                <label class="input-label">Poziție (oră)</label>
+                <input type="number" id="arrow-position" class="pos-input" min="1" max="12" placeholder="1–12" />
+              </div>
+              <button class="btn-add-arrow" id="btn-add-arrow" onclick="addArrow()">
+                ➤ Adaugă
+              </button>
+            </div>
+          </div>
+
+          <!-- MOD GRAFIC -->
+          <div id="graphic-input-section" class="hidden">
+            <div id="graphic-target-canvas" class="graphic-target-canvas"></div>
+            <p class="graphic-hint">Click / tap pe țintă pentru a înregistra impactul</p>
           </div>
 
           <div class="end-summary" id="end-summary"></div>
