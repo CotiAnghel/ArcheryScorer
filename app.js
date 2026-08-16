@@ -1048,9 +1048,9 @@ function renderGraphicTarget() {
 
   const spec = getTargetSpec();
   const rw = spec.diameter / 20; // mm per inel
-  const SVG = 280;
+  const SVG = 210;
   const CX = SVG / 2, CY = SVG / 2;
-  const maxR = 128; // px raza exterioară
+  const maxR = 98; // px raza exterioară
   const scale = maxR / (spec.diameter / 2); // px per mm
 
   const ns = 'http://www.w3.org/2000/svg';
@@ -1123,7 +1123,7 @@ function renderGraphicTarget() {
     fill:'none', stroke:'rgba(255,255,255,0.8)','stroke-width':'2','pointer-events':'none' }));
 
   // ── Zoom canvas (mini target amplificat la poziția cursorului) ──
-  const ZOOM_SIZE = 140;
+  const ZOOM_SIZE = 100;
   const ZOOM_FACTOR = 4;
   const zoomEl = document.getElementById('graphic-zoom-canvas');
 
@@ -1202,7 +1202,11 @@ function renderGraphicTarget() {
 
   svg.addEventListener('touchmove', e => {
     e.preventDefault();
-    const {x,y} = getXY(e);
+    const touch = e.touches[0];
+    const rect = svg.getBoundingClientRect();
+    const sx = SVG / rect.width, sy = SVG / rect.height;
+    const x = (touch.clientX - rect.left) * sx;
+    const y = (touch.clientY - rect.top) * sy;
     const d = svg.querySelector('#preview-dot');
     if(d){d.setAttribute('cx',x);d.setAttribute('cy',y);}
     updateZoom(x, y);
@@ -1210,10 +1214,15 @@ function renderGraphicTarget() {
 
   svg.addEventListener('touchend', e => {
     e.preventDefault();
-    const {x,y} = getXY(e);
-    handleImpact(x,y);
-    if(zoomEl) setTimeout(() => zoomEl.classList.add('hidden'), 800);
-  });
+    // touchend: usa changedTouches (touches e gol la touchend)
+    const touch = e.changedTouches[0];
+    const rect = svg.getBoundingClientRect();
+    const sx = SVG / rect.width, sy = SVG / rect.height;
+    const x = (touch.clientX - rect.left) * sx;
+    const y = (touch.clientY - rect.top) * sy;
+    handleImpact(x, y);
+    if(zoomEl) setTimeout(() => zoomEl.classList.add('hidden'), 1000);
+  }, { passive:false });
 
   container.innerHTML = '';
   container.appendChild(svg);
