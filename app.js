@@ -1001,9 +1001,14 @@ function getTargetSpec() {
 
 function mmToScore(distMm, spec) {
   const rw = spec.diameter / 20; // lățimea unui inel în mm
+  // X: distanță <= rw/2 (raza inelului X)
   if (distMm <= rw / 2) return 'X';
-  for (let ring = 1; ring <= 10; ring++) {
-    if (distMm <= rw * ring) return String(ring);
+  // ring=1 este EXTERIOR (1pt), ring=10 este cel mai interior (10pt)
+  // Raza exterioară a inelului cu scor S = rw * (11 - S)
+  // Ex: inel 10 (interior) → raza = rw*1, inel 1 (exterior) → raza = rw*10
+  for (let score = 10; score >= 1; score--) {
+    const outerRadiusMm = rw * (11 - score);
+    if (distMm <= outerRadiusMm) return String(score);
   }
   return 'M';
 }
@@ -1061,21 +1066,31 @@ function renderGraphicTarget() {
   };
 
   // Inele de la exterior spre interior
+  // ring=1 → exterior, 1pt, ALB; ring=10 → interior, 10pt, GALBEN
+  // Colorare: 1-2=alb, 3-4=negru, 5-6=albastru, 7-8=roșu, 9-10=galben
+  const ringFill = (ring) => {
+    if (ring <= 2) return '#f0f0f0';   // ALB (1-2)
+    if (ring <= 4) return '#1a1a1a';   // NEGRU (3-4)
+    if (ring <= 6) return '#2563eb';   // ALBASTRU (5-6)
+    if (ring <= 8) return '#dc2626';   // ROȘU (7-8)
+    return '#fbbf24';                   // GALBEN (9-10)
+  };
+
+  // Desenăm de la exterior (ring=10, cel mai mare) spre interior (ring=1, cel mai mic)
   for (let ring = 10; ring >= 1; ring--) {
     const rPx = Math.min(rw * ring * scale, maxR);
-    const ci = ring - 1; // 0=1pt...9=10pt
     svg.appendChild(mk('circle', {
       cx: CX, cy: CY, r: rPx,
-      fill: RING_COLORS_OUTER[ci],
-      stroke: '#55555580',
+      fill: ringFill(ring),
+      stroke: '#88888866',
       'stroke-width': ring % 2 === 0 ? '1.2' : '0.4'
     }));
   }
 
-  // X-ring
+  // X-ring (interior, mai deschis decât galbenul de 10)
   svg.appendChild(mk('circle', {
     cx: CX, cy: CY, r: (rw/2)*scale,
-    fill: '#fde68a', stroke: '#bbb', 'stroke-width': '0.5'
+    fill: '#fde68a', stroke: '#ccc', 'stroke-width': '0.8'
   }));
 
   // Crosshair
