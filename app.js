@@ -1123,7 +1123,7 @@ function renderGraphicTarget() {
     fill:'none', stroke:'rgba(255,255,255,0.8)','stroke-width':'2','pointer-events':'none' }));
 
   // ── Zoom canvas (mini target amplificat la poziția cursorului) ──
-  const ZOOM_SIZE = 80;
+  const ZOOM_SIZE = 140;
   const ZOOM_FACTOR = 4;
   const zoomEl = document.getElementById('graphic-zoom-canvas');
 
