@@ -976,10 +976,16 @@ function renderCentrajSection(session, containerId) {
   svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="2.5" fill="#fff"/>`;
   svg += '</svg>';
 
-  const distLabel = sessionCenter.dist < 0.5 ? 'centrat ✓' :
-    sessionCenter.dist < 2 ? 'ușor deplasat' : sessionCenter.dist < 4 ? 'deplasat' : 'deplasat mult';
-  const distColor = sessionCenter.dist < 0.5 ? 'var(--accent3)' :
-    sessionCenter.dist < 2 ? 'var(--accent)' : 'var(--accent2)';
+  // Praguri diferite pentru mm exacti vs unitati estimate
+  // Unitati 0-10: inel X=0, 10=0.5, 9=1.5 ... 1=9.5 — prag "centrat" = sub 0.5u
+  // MM exacti: prag "centrat" = sub 5mm (raza X-ring ~30mm pt 122cm)
+  const dv = sessionCenter.dist;
+  const isExact = sessionCenter.hasExact;
+  const distLabel = isExact
+    ? (dv < 5 ? 'centrat ✓' : dv < 20 ? 'ușor deplasat' : dv < 50 ? 'deplasat' : 'deplasat mult')
+    : (dv < 0.5 ? 'centrat ✓' : dv < 2 ? 'ușor deplasat' : dv < 5 ? 'deplasat' : 'deplasat mult');
+  const distColor = distLabel === 'centrat ✓' ? 'var(--accent3)' :
+    distLabel === 'ușor deplasat' ? 'var(--accent)' : 'var(--accent2)';
 
   el.innerHTML = `
     <div class="centraj-wrap">
