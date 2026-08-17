@@ -1108,8 +1108,9 @@ function renderGraphicTarget() {
     return '#bbb';
   };
 
-  // Desenăm de la exterior (scor 1, cerc mare) spre interior (scor 10, cerc mic)
-  for (let score = 1; score <= 10; score++) {
+  // Desenăm de la exterior spre interior, doar inelele vizibile pt acest tip de țintă
+  const minScore = spec.minScore || 1;
+  for (let score = minScore; score <= 10; score++) {
     const outerRadiusMm = rw * (11 - score); // mm
     const rPx = Math.min(outerRadiusMm * scale, maxR);
     svg.appendChild(mk('circle', {
@@ -1168,7 +1169,7 @@ function renderGraphicTarget() {
     const offX = svgX - CX;
     const offY = svgY - CY;
     // Desenăm inelele relative la poziția cursorului
-    for (let score = 1; score <= 10; score++) {
+    for (let score = minScore; score <= 10; score++) {
       const rMm = rw * (11 - score);
       const rPx = rMm * zScale;
       const cx2 = zc - offX * ZOOM_FACTOR;

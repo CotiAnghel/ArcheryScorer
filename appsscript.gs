@@ -300,86 +300,78 @@ function writeCentrajSection(sheet, startRow, ends) {
 }
 
 function drawCentrajChart(sheet, startRow, ends, sessionCenter) {
-  // Calculează coordonatele pentru toate săgețile
   var SCORE_RADIUS = { 'X': 0, '10': 0.5, '9': 1.5, '8': 2.5, '7': 3.5,
     '6': 4.5, '5': 5.5, '4': 6.5, '3': 7.5, '2': 8.5, '1': 9.5, 'M': 10.5 };
 
-  // Header
-  var hdr = sheet.getRange(startRow, 1, 1, 6);
-  hdr.merge().setValue('GRAFIC CENTRAJ GRUP');
-  hdr.setBackground('#1a1a2e').setFontColor('#e8c44a').setFontWeight('bold');
-
-  // Culori per serie
-  var serieColors = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316','#ef4444','#06b6d4','#84cc16'];
-
-  // Dimensiuni grafic în pixeli (pentru SpreadsheetApp)
-  // Creăm un grafic de tip scatter folosind API-ul Charts
-  try {
-    // Construim tabelul de date pentru grafic
-    var dataStartRow = startRow + 2;
-    var dataHdr = ['Serie', 'X (mm/u)', 'Y (mm/u)', 'Scor', 'Label'];
-    sheet.getRange(dataStartRow, 1, 1, dataHdr.length).setValues([dataHdr])
-         .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold');
-
-    var dataRow = dataStartRow + 1;
-    var allDataRows = [];
-    var hasExactCoords = false;
-
-    ends.forEach(function(end, endIdx) {
-      (end.arrows || []).forEach(function(a) {
-        if (a.score === 'M') return;
-        var x, y;
-        if (a.xMm !== undefined) {
-          x = a.xMm; y = a.yMm;
-          hasExactCoords = true;
-        } else if (a.position) {
-          var r = SCORE_RADIUS[String(a.score)] || 5;
-          var angleDeg = (parseInt(a.position) / 12.0) * 360.0;
-          var angleRad = angleDeg * Math.PI / 180;
-          x = r * Math.sin(angleRad) * 10;
-          y = -r * Math.cos(angleRad) * 10;
-        } else { return; }
-        allDataRows.push([end.endNumber || endIdx+1, Math.round(x*10)/10, Math.round(y*10)/10, a.score, 'S'+(endIdx+1)+':'+a.score]);
-      });
+  // Colectează coordonate
+  var points = [];
+  var hasExact = false;
+  ends.forEach(function(end, ei) {
+    (end.arrows || []).forEach(function(a) {
+      if (a.score === 'M') return;
+      var x, y;
+      if (a.xMm !== undefined) {
+        x = a.xMm; y = a.yMm; hasExact = true;
+      } else if (a.position) {
+        var r = (SCORE_RADIUS[String(a.score)] || 5) * 10;
+        var rad = (parseInt(a.position) / 12.0) * 2 * Math.PI;
+        x = r * Math.sin(rad); y = -r * Math.cos(rad);
+      } else { return; }
+      points.push({ x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10,
+                    score: a.score, serie: end.endNumber || ei + 1 });
     });
+  });
 
-    if (allDataRows.length === 0) return;
+  if (points.length === 0) return;
 
-    sheet.getRange(dataRow, 1, allDataRows.length, 5).setValues(allDataRows);
+  var dataStart = startRow + 2;
 
-    // Adaugă și centrul sesiunii
-    var centerX = sessionCenter.cx;
-    var centerY = sessionCenter.cy;
-    // Dacă nu e exact, înmulțim cu 10 pentru mm
-    if (!hasExactCoords) { centerX *= 10; centerY *= 10; }
-    sheet.getRange(dataRow + allDataRows.length, 1, 1, 5)
-         .setValues([['Centru', Math.round(centerX*10)/10, Math.round(centerY*10)/10, 'C', 'Centru sesiune']]);
+  // Header secțiune
+  var hdrCell = sheet.getRange(startRow, 1, 1, 4);
+  hdrCell.merge().setValue('GRAFIC CENTRAJ GRUP');
+  hdrCell.setBackground('#1a1a2e').setFontColor('#e8c44a').setFontWeight('bold');
 
-    // Creează graficul scatter
-    var chartRange = sheet.getRange(dataStartRow, 2, allDataRows.length + 2, 2);
+  // Header tabel date
+  sheet.getRange(dataStart, 1, 1, 4).setValues([['X sageti', 'Y sageti', 'X centru', 'Y centru']])
+       .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold');
+
+  // Centru sesiune
+  var cx = sessionCenter ? sessionCenter.cx : 0;
+  var cy = sessionCenter ? sessionCenter.cy : 0;
+  if (!hasExact) { cx = cx * 10; cy = cy * 10; }
+
+  // Rânduri de date
+  var tableRows = [];
+  points.forEach(function(p, i) {
+    tableRows.push([
+      p.x, p.y,
+      i === 0 ? Math.round(cx * 10) / 10 : null,
+      i === 0 ? Math.round(cy * 10) / 10 : null
+    ]);
+  });
+  sheet.getRange(dataStart + 1, 1, tableRows.length, 4).setValues(tableRows);
+
+  // Grafic scatter
+  try {
+    var nRows = tableRows.length + 1;
     var chart = sheet.newChart()
       .setChartType(Charts.ChartType.SCATTER)
-      .addRange(chartRange)
-      .setOption('title', 'Centraj grup — ' + (hasExactCoords ? 'coordonate exacte (mm)' : 'estimate'))
-      .setOption('hAxis', { title: 'X → Dreapta (mm)', gridlines: { count: 5 } })
-      .setOption('vAxis', { title: 'Y ↑ Sus (mm)', gridlines: { count: 5 } })
-      .setOption('backgroundColor', '#1a1a2e')
-      .setOption('titleTextStyle', { color: '#e8c44a', fontSize: 11 })
-      .setOption('hAxis.textStyle', { color: '#e8eaf0' })
-      .setOption('vAxis.textStyle', { color: '#e8eaf0' })
-      .setOption('legend', { position: 'none' })
+      .addRange(sheet.getRange(dataStart, 1, nRows, 2))
+      .addRange(sheet.getRange(dataStart, 3, 2, 2))
+      .setOption('title', hasExact ? 'Centraj grup (mm exacti)' : 'Centraj grup (estimat)')
+      .setOption('hAxis', { title: 'Stanga(-) / Dreapta(+) mm' })
+      .setOption('vAxis', { title: 'Jos(-) / Sus(+) mm' })
+      .setOption('legend', { position: 'right' })
       .setOption('pointSize', 8)
-      .setOption('colors', ['#e8c44a'])
-      .setPosition(startRow + 2, 8, 0, 0)
-      .setNumRows(allDataRows.length + 2)
-      .setNumColumns(2)
+      .setOption('series', { 0: { color: '#e8a800' }, 1: { color: '#ef4444', pointSize: 12 } })
+      .setOption('width', 440)
+      .setOption('height', 380)
+      .setPosition(startRow, 6, 0, 0)
       .build();
-
     sheet.insertChart(chart);
-
   } catch(err) {
-    // Graficul e opțional — dacă eșuează, continuăm
-    sheet.getRange(startRow + 1, 1).setValue('Grafic indisponibil: ' + err.message);
+    Logger.log('Chart error: ' + err.message);
+    sheet.getRange(startRow + 1, 6).setValue('Eroare grafic: ' + err.message);
   }
 }
 
