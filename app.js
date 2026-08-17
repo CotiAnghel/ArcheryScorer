@@ -998,17 +998,19 @@ function renderCentrajSection(session, containerId) {
 // ── Mod grafic input săgeți ────────────────────────────────
 
 const TARGET_SPECS = {
-  '40cm_10ring_indoor':  { name: '40cm 10 zone indoor', diameter: 400, rings: 10 },
-  '40cm_5ring_indoor':   { name: '40cm 5 zone compound',diameter: 400, rings: 5  },
-  '60cm_indoor':         { name: '60cm indoor',         diameter: 600, rings: 10 },
-  '80cm_10ring':         { name: '80cm 10 zone',        diameter: 800, rings: 10 },
-  '80cm_6ring_compound': { name: '80cm 6 zone compound',diameter: 480, rings: 6  },
-  '80cm_X_compound':     { name: '80cm X10 compound',   diameter: 800, rings: 10 },
-  '122cm_10ring':        { name: '122cm 10 zone',       diameter: 1220,rings: 10 },
-  '122cm_5ring':         { name: '122cm 5 zone',        diameter: 1220,rings: 5  },
-  'field_60cm':          { name: '60cm Field',          diameter: 600, rings: 6  },
-  'field_80cm':          { name: '80cm Field',          diameter: 800, rings: 6  },
-  '3d_waf':              { name: '3D WAF',              diameter: 400, rings: 5  },
+  // minScore: scorul minim al inelului exterior vizibil
+  // 10 zone: 1-10+X, 5 zone: 6-10+X, 6 zone: 5-10+X
+  '40cm_10ring_indoor':  { name: '40cm 10 zone indoor',  diameter: 400,  rings: 10, minScore: 1 },
+  '40cm_5ring_indoor':   { name: '40cm 5 zone compound', diameter: 400,  rings: 5,  minScore: 6 },
+  '60cm_indoor':         { name: '60cm indoor',          diameter: 600,  rings: 10, minScore: 1 },
+  '80cm_10ring':         { name: '80cm 10 zone',         diameter: 800,  rings: 10, minScore: 1 },
+  '80cm_6ring_compound': { name: '80cm 6 zone compound', diameter: 480,  rings: 6,  minScore: 5 },
+  '80cm_X_compound':     { name: '80cm X10 compound',    diameter: 800,  rings: 10, minScore: 1 },
+  '122cm_10ring':        { name: '122cm 10 zone',        diameter: 1220, rings: 10, minScore: 1 },
+  '122cm_5ring':         { name: '122cm 5 zone',         diameter: 1220, rings: 5,  minScore: 6 },
+  'field_60cm':          { name: '60cm Field',           diameter: 600,  rings: 6,  minScore: 5 },
+  'field_80cm':          { name: '80cm Field',           diameter: 800,  rings: 6,  minScore: 5 },
+  '3d_waf':              { name: '3D WAF',               diameter: 400,  rings: 5,  minScore: 6 },
 };
 
 // Culori inele (index 0=inel 1pt exterior ... 9=inel 10pt interior)

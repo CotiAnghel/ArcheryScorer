@@ -370,8 +370,11 @@ function drawCentrajChart(sheet, startRow, ends, sessionCenter) {
       .build();
     sheet.insertChart(chart);
   } catch(err) {
-    Logger.log('Chart error: ' + err.message);
-    sheet.getRange(startRow + 1, 6).setValue('Eroare grafic: ' + err.message);
+    // Scrie eroarea vizibil în sheet pentru debugging
+    var errCell = sheet.getRange(startRow + 1, 6, 1, 3);
+    errCell.merge().setValue('EROARE GRAFIC: ' + err.message + ' | Stack: ' + (err.stack || 'N/A'));
+    errCell.setBackground('#ffcccc').setFontColor('#cc0000').setFontWeight('bold');
+    errCell.setWrap(true);
   }
 }
 
