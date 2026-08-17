@@ -331,52 +331,7 @@ function drawCentrajChart(sheet, startRow, ends, sessionCenter) {
   hdrCell.merge().setValue('GRAFIC CENTRAJ GRUP');
   hdrCell.setBackground('#1a1a2e').setFontColor('#e8c44a').setFontWeight('bold');
 
-  // Header tabel date
-  sheet.getRange(dataStart, 1, 1, 4).setValues([['X sageti', 'Y sageti', 'X centru', 'Y centru']])
-       .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold');
-
-  // Centru sesiune
-  var cx = sessionCenter ? sessionCenter.cx : 0;
-  var cy = sessionCenter ? sessionCenter.cy : 0;
-  if (!hasExact) { cx = cx * 10; cy = cy * 10; }
-
-  // Rânduri de date
-  var tableRows = [];
-  points.forEach(function(p, i) {
-    tableRows.push([
-      p.x, p.y,
-      i === 0 ? Math.round(cx * 10) / 10 : null,
-      i === 0 ? Math.round(cy * 10) / 10 : null
-    ]);
-  });
-  sheet.getRange(dataStart + 1, 1, tableRows.length, 4).setValues(tableRows);
-
-  // Grafic scatter
-  try {
-    var nRows = tableRows.length + 1;
-    var chart = sheet.newChart()
-      .setChartType(Charts.ChartType.SCATTER)
-      .addRange(sheet.getRange(dataStart, 1, nRows, 2))
-      .addRange(sheet.getRange(dataStart, 3, 2, 2))
-      .setOption('title', hasExact ? 'Centraj grup (mm exacti)' : 'Centraj grup (estimat)')
-      .setOption('hAxis', { title: 'Stanga(-) / Dreapta(+) mm' })
-      .setOption('vAxis', { title: 'Jos(-) / Sus(+) mm' })
-      .setOption('legend', { position: 'right' })
-      .setOption('pointSize', 8)
-      .setOption('series', { 0: { color: '#e8a800' }, 1: { color: '#ef4444', pointSize: 12 } })
-      .setOption('width', 440)
-      .setOption('height', 380)
-      .setPosition(startRow, 6, 0, 0)
-      .build();
-    sheet.insertChart(chart);
-  } catch(err) {
-    // Scrie eroarea vizibil în sheet pentru debugging
-    var errCell = sheet.getRange(startRow + 1, 6, 1, 3);
-    errCell.merge().setValue('EROARE GRAFIC: ' + err.message + ' | Stack: ' + (err.stack || 'N/A'));
-    errCell.setBackground('#ffcccc').setFontColor('#cc0000').setFontWeight('bold');
-    errCell.setWrap(true);
-  }
-}
+  // Header tabel date cu 3 serii: sageti, centru grup, centru tinta  sheet.getRange(dataStart, 1, 1, 6).setValues(    [['X sageti', 'Y sageti', 'X centru', 'Y centru', 'X tinta', 'Y tinta']])    .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold');  // Centru sesiune  var cx = sessionCenter ? sessionCenter.cx : 0;  var cy = sessionCenter ? sessionCenter.cy : 0;  if (!hasExact) { cx = cx * 10; cy = cy * 10; }  cx = Math.round(cx * 10) / 10;  cy = Math.round(cy * 10) / 10;  // Rânduri de date  var tableRows = [];  points.forEach(function(p, i) {    tableRows.push([      p.x, p.y,      i === 0 ? cx : null,      i === 0 ? cy : null,      i === 0 ? 0 : null,      i === 0 ? 0 : null    ]);  });  sheet.getRange(dataStart + 1, 1, tableRows.length, 6).setValues(tableRows);  // Grafic scatter cu 3 serii  try {    var nRows = tableRows.length + 1;    var chart = sheet.newChart()      .setChartType(Charts.ChartType.SCATTER)      .addRange(sheet.getRange(dataStart, 1, nRows, 2))      .addRange(sheet.getRange(dataStart, 3, 2, 2))      .addRange(sheet.getRange(dataStart, 5, 2, 2))      .setOption('title', hasExact ? 'Centraj grup (mm exacti)' : 'Centraj grup (estimat)')      .setOption('hAxis', { title: 'Stanga (-) / Dreapta (+) mm', gridlines: {count: 5} })      .setOption('vAxis', { title: 'Jos (-) / Sus (+) mm', gridlines: {count: 5} })      .setOption('legend', { position: 'right' })      .setOption('series', {        0: { color: '#e8a800', pointSize: 7  },        1: { color: '#ef4444', pointSize: 14 },        2: { color: '#333333', pointSize: 10 }      })      .setOption('width', 460)      .setOption('height', 400)      .setPosition(startRow, 8, 0, 0)      .build();    sheet.insertChart(chart);  } catch(err) {    var errCell = sheet.getRange(startRow + 1, 8, 1, 3);    errCell.merge().setValue('EROARE GRAFIC: ' + err.message);    errCell.setBackground('#ffcccc').setFontColor('#cc0000').setFontWeight('bold');    errCell.setWrap(true);  }}
 
 // ── Formatare tabel săgeți: lățimi egale + grupare vizuală ──
 function formatArrowTable(sheet, headerRow, firstDataRow, lastDataRow, maxArrows) {

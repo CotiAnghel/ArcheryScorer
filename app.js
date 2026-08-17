@@ -861,35 +861,57 @@ function arrowToXY(score, position) {
 }
 
 function groupCenter(arrows) {
-  // Prioritizează coordonatele exacte mm (mod grafic) față de estimarea din scor+oră
-  const valid = arrows.filter(a => a.score !== 'M' && (a.xMm !== undefined || a.position));
-  if (!valid.length) return null;
-  const coords = valid.map(a => {
-    if (a.xMm !== undefined) {
-      // Mod grafic — coordonate exacte în mm, convertim la unități normalizate (/10)
-      return { x: a.xMm / 10, y: a.yMm / 10, exact: true };
-    }
-    return { ...arrowToXY(a.score, a.position), exact: false };
-  });
-  const hasExact = coords.some(c => c.exact);
+  // Separăm săgețile cu coordonate exacte de cele cu scor+oră
+  const exact = arrows.filter(a => a.score !== 'M' && a.xMm !== undefined);
+  const estimated = arrows.filter(a => a.score !== 'M' && a.xMm === undefined && a.position);
+  const hasExact = exact.length > 0;
+
+  // Dacă avem coordonate exacte, le folosim pe toate (mm)
+  // Dacă nu, folosim estimarea din scor+oră (unități 0-10)
+  let coords, unit, scaleFactor;
+
+  if (hasExact) {
+    // Coordonate exacte în mm — le folosim direct
+    // Ignorăm săgețile fără coordonate exacte din această sesiune
+    coords = exact.map(a => ({ x: a.xMm, y: a.yMm }));
+    unit = 'mm';
+    scaleFactor = 1; // mm direct
+  } else if (estimated.length > 0) {
+    // Estimare din scor+oră — unități 0-10
+    coords = estimated.map(a => {
+      const c = arrowToXY(a.score, a.position);
+      return { x: c.x, y: c.y };
+    });
+    unit = 'u';
+    scaleFactor = 10; // pentru SVG (normalizat 0-10 → *10 = mm echivalent)
+  } else {
+    return null;
+  }
+
+  if (!coords.length) return null;
+
   const cx = coords.reduce((s, c) => s + c.x, 0) / coords.length;
   const cy = coords.reduce((s, c) => s + c.y, 0) / coords.length;
   const spread = Math.sqrt(coords.reduce((s, c) => s + (c.x-cx)**2 + (c.y-cy)**2, 0) / coords.length);
+  const dist = Math.sqrt(cx*cx + cy*cy);
   const angleDeg = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360;
   const hour = ((angleDeg / 360 * 12) % 12) || 12;
-  const dist = Math.sqrt(cx*cx + cy*cy);
-  // Dacă avem coordonate exacte, convertim înapoi în mm pentru afișare
-  const unit = hasExact ? 'mm' : 'u';
-  const displayCx = hasExact ? +(cx * 10).toFixed(1) : +cx.toFixed(2);
-  const displayCy = hasExact ? +(cy * 10).toFixed(1) : +cy.toFixed(2);
-  const displaySpread = hasExact ? +(spread * 10).toFixed(1) : +spread.toFixed(2);
-  const displayDist = hasExact ? +(dist * 10).toFixed(1) : +dist.toFixed(2);
+
+  // _cx/_cy sunt valorile normalizate pentru SVG (în unități 0-10)
+  const svgScale = hasExact ? (1/10) : 1; // mm/10 = unitati SVG
+
   return {
-    cx: displayCx, cy: displayCy, spread: displaySpread,
-    hour: +hour.toFixed(1), dist: displayDist, count: valid.length,
+    cx: +cx.toFixed(hasExact ? 1 : 2),
+    cy: +cy.toFixed(hasExact ? 1 : 2),
+    spread: +spread.toFixed(hasExact ? 1 : 2),
+    hour: +hour.toFixed(1),
+    dist: +dist.toFixed(hasExact ? 1 : 2),
+    count: coords.length,
     unit, hasExact,
-    // Păstrăm și valorile normalizate pentru SVG
-    _cx: cx, _cy: cy, _spread: spread, _dist: dist
+    _cx: cx * svgScale,
+    _cy: cy * svgScale,
+    _spread: spread * svgScale,
+    _dist: dist * svgScale
   };
 }
 
