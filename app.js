@@ -857,7 +857,7 @@ function arrowToXY(score, position) {
   if (r === 0 || !position) return { x: 0, y: 0, r: 0 };
   const angleDeg = (parseInt(position) / 12.0) * 360.0;
   const angleRad = angleDeg * Math.PI / 180;
-  return { x: r * Math.sin(angleRad), y: -r * Math.cos(angleRad), r };
+  return { x: r * Math.sin(angleRad), y: r * Math.cos(angleRad), r };
 }
 
 function groupCenter(arrows) {
@@ -894,7 +894,7 @@ function groupCenter(arrows) {
   const cy = coords.reduce((s, c) => s + c.y, 0) / coords.length;
   const spread = Math.sqrt(coords.reduce((s, c) => s + (c.x-cx)**2 + (c.y-cy)**2, 0) / coords.length);
   const dist = Math.sqrt(cx*cx + cy*cy);
-  const angleDeg = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360;
+  const angleDeg = (Math.atan2(cx, cy) * 180 / Math.PI + 360) % 360;
   const hour = ((angleDeg / 360 * 12) % 12) || 12;
 
   // _cx/_cy sunt valorile normalizate pentru SVG (în unități 0-10)
@@ -949,7 +949,7 @@ function renderCentrajSection(session, containerId) {
   const maxR = 82;
   const scale = maxR / 10.5;
 
-  function toSVG(x, y) { return { sx: cx + x * scale, sy: cy + y * scale }; }
+  function toSVG(x, y) { return { sx: cx + x * scale, sy: cy - y * scale }; }
 
   let svg = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}" class="centraj-svg">`;
   [{ r: 10.5, fill: '#f0f0f0' }, { r: 9.5, fill: '#1a1a1a' },
