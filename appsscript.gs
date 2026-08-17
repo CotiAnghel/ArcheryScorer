@@ -292,6 +292,95 @@ function writeCentrajSection(sheet, startRow, ends) {
          .setHorizontalAlignment('center');
   }
   sheet.setColumnWidth(6, 140);
+
+  // ── Grafic vizual centraj ca SVG în sheet ──────────────
+  if (sc) {
+    drawCentrajChart(sheet, row + 2, ends, sc);
+  }
+}
+
+function drawCentrajChart(sheet, startRow, ends, sessionCenter) {
+  // Calculează coordonatele pentru toate săgețile
+  var SCORE_RADIUS = { 'X': 0, '10': 0.5, '9': 1.5, '8': 2.5, '7': 3.5,
+    '6': 4.5, '5': 5.5, '4': 6.5, '3': 7.5, '2': 8.5, '1': 9.5, 'M': 10.5 };
+
+  // Header
+  var hdr = sheet.getRange(startRow, 1, 1, 6);
+  hdr.merge().setValue('GRAFIC CENTRAJ GRUP');
+  hdr.setBackground('#1a1a2e').setFontColor('#e8c44a').setFontWeight('bold');
+
+  // Culori per serie
+  var serieColors = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316','#ef4444','#06b6d4','#84cc16'];
+
+  // Dimensiuni grafic în pixeli (pentru SpreadsheetApp)
+  // Creăm un grafic de tip scatter folosind API-ul Charts
+  try {
+    // Construim tabelul de date pentru grafic
+    var dataStartRow = startRow + 2;
+    var dataHdr = ['Serie', 'X (mm/u)', 'Y (mm/u)', 'Scor', 'Label'];
+    sheet.getRange(dataStartRow, 1, 1, dataHdr.length).setValues([dataHdr])
+         .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold');
+
+    var dataRow = dataStartRow + 1;
+    var allDataRows = [];
+    var hasExactCoords = false;
+
+    ends.forEach(function(end, endIdx) {
+      (end.arrows || []).forEach(function(a) {
+        if (a.score === 'M') return;
+        var x, y;
+        if (a.xMm !== undefined) {
+          x = a.xMm; y = a.yMm;
+          hasExactCoords = true;
+        } else if (a.position) {
+          var r = SCORE_RADIUS[String(a.score)] || 5;
+          var angleDeg = (parseInt(a.position) / 12.0) * 360.0;
+          var angleRad = angleDeg * Math.PI / 180;
+          x = r * Math.sin(angleRad) * 10;
+          y = -r * Math.cos(angleRad) * 10;
+        } else { return; }
+        allDataRows.push([end.endNumber || endIdx+1, Math.round(x*10)/10, Math.round(y*10)/10, a.score, 'S'+(endIdx+1)+':'+a.score]);
+      });
+    });
+
+    if (allDataRows.length === 0) return;
+
+    sheet.getRange(dataRow, 1, allDataRows.length, 5).setValues(allDataRows);
+
+    // Adaugă și centrul sesiunii
+    var centerX = sessionCenter.cx;
+    var centerY = sessionCenter.cy;
+    // Dacă nu e exact, înmulțim cu 10 pentru mm
+    if (!hasExactCoords) { centerX *= 10; centerY *= 10; }
+    sheet.getRange(dataRow + allDataRows.length, 1, 1, 5)
+         .setValues([['Centru', Math.round(centerX*10)/10, Math.round(centerY*10)/10, 'C', 'Centru sesiune']]);
+
+    // Creează graficul scatter
+    var chartRange = sheet.getRange(dataStartRow, 2, allDataRows.length + 2, 2);
+    var chart = sheet.newChart()
+      .setChartType(Charts.ChartType.SCATTER)
+      .addRange(chartRange)
+      .setOption('title', 'Centraj grup — ' + (hasExactCoords ? 'coordonate exacte (mm)' : 'estimate'))
+      .setOption('hAxis', { title: 'X → Dreapta (mm)', gridlines: { count: 5 } })
+      .setOption('vAxis', { title: 'Y ↑ Sus (mm)', gridlines: { count: 5 } })
+      .setOption('backgroundColor', '#1a1a2e')
+      .setOption('titleTextStyle', { color: '#e8c44a', fontSize: 11 })
+      .setOption('hAxis.textStyle', { color: '#e8eaf0' })
+      .setOption('vAxis.textStyle', { color: '#e8eaf0' })
+      .setOption('legend', { position: 'none' })
+      .setOption('pointSize', 8)
+      .setOption('colors', ['#e8c44a'])
+      .setPosition(startRow + 2, 8, 0, 0)
+      .setNumRows(allDataRows.length + 2)
+      .setNumColumns(2)
+      .build();
+
+    sheet.insertChart(chart);
+
+  } catch(err) {
+    // Graficul e opțional — dacă eșuează, continuăm
+    sheet.getRange(startRow + 1, 1).setValue('Grafic indisponibil: ' + err.message);
+  }
 }
 
 // ── Formatare tabel săgeți: lățimi egale + grupare vizuală ──

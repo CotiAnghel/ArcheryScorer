@@ -861,17 +861,36 @@ function arrowToXY(score, position) {
 }
 
 function groupCenter(arrows) {
-  const valid = arrows.filter(a => a.score !== 'M' && a.position);
+  // Prioritizează coordonatele exacte mm (mod grafic) față de estimarea din scor+oră
+  const valid = arrows.filter(a => a.score !== 'M' && (a.xMm !== undefined || a.position));
   if (!valid.length) return null;
-  const coords = valid.map(a => arrowToXY(a.score, a.position));
+  const coords = valid.map(a => {
+    if (a.xMm !== undefined) {
+      // Mod grafic — coordonate exacte în mm, convertim la unități normalizate (/10)
+      return { x: a.xMm / 10, y: a.yMm / 10, exact: true };
+    }
+    return { ...arrowToXY(a.score, a.position), exact: false };
+  });
+  const hasExact = coords.some(c => c.exact);
   const cx = coords.reduce((s, c) => s + c.x, 0) / coords.length;
   const cy = coords.reduce((s, c) => s + c.y, 0) / coords.length;
   const spread = Math.sqrt(coords.reduce((s, c) => s + (c.x-cx)**2 + (c.y-cy)**2, 0) / coords.length);
   const angleDeg = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360;
   const hour = ((angleDeg / 360 * 12) % 12) || 12;
   const dist = Math.sqrt(cx*cx + cy*cy);
-  return { cx: +cx.toFixed(2), cy: +cy.toFixed(2), spread: +spread.toFixed(2),
-           hour: +hour.toFixed(1), dist: +dist.toFixed(2), count: valid.length };
+  // Dacă avem coordonate exacte, convertim înapoi în mm pentru afișare
+  const unit = hasExact ? 'mm' : 'u';
+  const displayCx = hasExact ? +(cx * 10).toFixed(1) : +cx.toFixed(2);
+  const displayCy = hasExact ? +(cy * 10).toFixed(1) : +cy.toFixed(2);
+  const displaySpread = hasExact ? +(spread * 10).toFixed(1) : +spread.toFixed(2);
+  const displayDist = hasExact ? +(dist * 10).toFixed(1) : +dist.toFixed(2);
+  return {
+    cx: displayCx, cy: displayCy, spread: displaySpread,
+    hour: +hour.toFixed(1), dist: displayDist, count: valid.length,
+    unit, hasExact,
+    // Păstrăm și valorile normalizate pentru SVG
+    _cx: cx, _cy: cy, _spread: spread, _dist: dist
+  };
 }
 
 function directionLabel(hour) {
@@ -923,13 +942,13 @@ function renderCentrajSection(session, containerId) {
 
   const colors = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316','#ef4444','#06b6d4','#84cc16'];
   endCenters.forEach((ec, i) => {
-    const p = toSVG(ec.center.cx, ec.center.cy);
+    const p = toSVG(ec.center._cx ?? ec.center.cx, ec.center._cy ?? ec.center.cy);
     const col = colors[i % colors.length];
     svg += `<circle cx="${p.sx}" cy="${p.sy}" r="4" fill="${col}" opacity="0.85"/>`;
     svg += `<text x="${p.sx+5}" y="${p.sy+4}" fill="${col}" font-size="8" font-family="monospace" font-weight="bold">S${ec.endNum}</text>`;
   });
 
-  const sc = toSVG(sessionCenter.cx, sessionCenter.cy);
+  const sc = toSVG(sessionCenter._cx ?? sessionCenter.cx, sessionCenter._cy ?? sessionCenter.cy);
   svg += `<line x1="${cx}" y1="${cy}" x2="${sc.sx}" y2="${sc.sy}" stroke="#fff" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.7"/>`;
   svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="7" fill="none" stroke="#fff" stroke-width="2.5"/>`;
   svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="2.5" fill="#fff"/>`;
@@ -954,7 +973,11 @@ function renderCentrajSection(session, containerId) {
         </div>
         <div class="centraj-stat">
           <span class="centraj-label">Dispersie grup</span>
-          <span class="centraj-value">${sessionCenter.spread}</span>
+          <span class="centraj-value">${sessionCenter.spread} ${sessionCenter.unit || 'u'}</span>
+        </div>
+        <div class="centraj-stat">
+          <span class="centraj-label">Precizie date</span>
+          <span class="centraj-value" style="font-size:.75rem">${sessionCenter.hasExact ? '📍 exacte (mm)' : '≈ estimate (oră)'}</span>
         </div>
         <div class="centraj-stat">
           <span class="centraj-label">Săgeți analizate</span>
