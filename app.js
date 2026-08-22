@@ -486,11 +486,11 @@ function renderEndArrows(ape) {
     const a = endArrows[i];
     if (a) {
       const editing = editingArrowIndex === i;
-      html += `<div class="arrow-chip ${scoreClass(a.score)}${editing ? ' editing' : ''}" style="position:relative;padding-right:1.4rem">
-        <span onclick="editArrow(${i})" title="Click pentru editare" style="cursor:pointer">${a.score}</span>
+      html += `<div class="arrow-chip ${scoreClass(a.score)}${editing ? ' editing' : ''}" onclick="editArrow(${i})" title="Click pentru editare">
+        <span>${a.score}</span>
         <span class="chip-pos">${a.position ? `${a.position}h` : '—'}</span>
         ${editing ? '<span class="chip-edit-indicator">✎</span>' : ''}
-        <span onclick="deleteArrow(${i})" title="Șterge săgeata" style="position:absolute;top:-4px;right:-4px;background:#dc2626;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1;font-weight:bold">✕</span>
+        <button onclick="event.stopPropagation();deleteArrow(${i})" class="chip-delete-btn" title="Șterge">✕</button>
       </div>`;
     } else if (!freeForm) {
       html += `<div class="arrow-chip pending">${i + 1}</div>`;
