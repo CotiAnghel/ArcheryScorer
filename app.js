@@ -1032,4 +1032,165 @@ function renderCentrajSection(session, containerId) {
     </div>`;
 }
 
+function exportExcel() {
+  if (!sessions.length) { toast('Nicio sesiune de exportat!'); return; }
 
+  // Build CSV per session — we'll produce one workbook via SheetJS
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  script.onload = () => doExcelExport();
+  document.head.appendChild(script);
+}
+
+function doExcelExport() {
+  const XLSX = window.XLSX;
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const summaryRows = [['Data', 'Tip', 'Arc', 'Distanță (m)', 'Săgeți', 'Serii', 'Total', 'X-uri', 'Medie/Săgeată']];
+  sessions.forEach(s => {
+    summaryRows.push([
+      new Date(s.date).toLocaleDateString('ro-RO'),
+      s.type === 'training' ? 'Antrenament' : 'Concurs',
+      s.bow?.name || '',
+      s.config.distance || '',
+      s.totalArrows || 0,
+      s.ends.length,
+      s.totalScore || 0,
+      s.totalXs || 0,
+      s.avgPerArrow || ''
+    ]);
+  });
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Rezumat');
+
+  // One sheet per session
+  sessions.forEach(s => {
+    const dateStr = new Date(s.date).toLocaleDateString('ro-RO').replace(/\//g, '-');
+    const bowShort = (s.bow?.name || 'Arc').substring(0, 12).replace(/[^a-zA-Z0-9\s]/g, '');
+    const type = s.type === 'training' ? 'Ant' : 'Cnc';
+    const sheetName = `${type}_${bowShort}_${dateStr}`.substring(0, 31);
+
+    const rows = [
+      ['Tip', s.type === 'training' ? 'Antrenament' : 'Concurs'],
+      ['Arc', s.bow?.name || ''],
+      ['Putere (lbs)', s.bow?.poundage || ''],
+      ['Data', new Date(s.date).toLocaleString('ro-RO')],
+      ['Distanță (m)', s.config.distance || ''],
+      ['Tip țintă', s.config.target || ''],
+      [],
+      ['Seria', 'Săgeată 1', 'Pos 1', 'Săgeată 2', 'Pos 2', 'Săgeată 3', 'Pos 3', 'Săgeată 4', 'Pos 4', 'Săgeată 5', 'Pos 5', 'Săgeată 6', 'Pos 6', 'Total serie']
+    ];
+
+    s.ends.forEach(end => {
+      const row = [end.endNumber];
+      for (let i = 0; i < 6; i++) {
+        const a = end.arrows[i];
+        row.push(a ? a.score : '');
+        row.push(a?.position ? `${a.position}h` : '');
+      }
+      row.push(end.total);
+      rows.push(row);
+    });
+
+    rows.push([]);
+    rows.push(['TOTAL', '', '', '', '', '', '', '', '', '', '', '', '', s.totalScore || 0]);
+    rows.push(['X-uri', s.totalXs || 0]);
+    rows.push(['Medie/săgeată', s.avgPerArrow || '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  XLSX.writeFile(wb, `Archery_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('✓ Excel descărcat!', 'success');
+}
+
+function exportCSV() {
+  if (!sessions.length) { toast('Nicio sesiune de exportat!'); return; }
+  let csv = 'SessionID,Data,Tip,Arc,Putere,Distanta,TipTinta,Seria,Sageata,Punctaj,Pozitie\n';
+  sessions.forEach(s => {
+    const date = new Date(s.date).toISOString().slice(0,10);
+    s.ends.forEach(end => {
+      end.arrows.forEach((a, i) => {
+        csv += [s.id, date, s.type, s.bow?.name || '', s.bow?.poundage || '',
+          s.config.distance || '', s.config.target || '',
+          end.endNumber, i + 1, a.score, a.position || ''].join(',') + '\n';
+      });
+    });
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Archery_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast('✓ CSV descărcat!', 'success');
+}
+
+// ── Service Worker ─────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(console.warn);
+  });
+}
+
+// ── Toast ──────────────────────────────────────────────
+let toastTimer;
+
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast${type ? ' ' + type : ''}`;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+// ── PWA Install ─────────────────────────────────────────────
+let deferredInstallPrompt = null;
+const INSTALL_DISMISSED_KEY = 'archery_install_dismissed';
+
+function initInstallPrompt() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) return;
+  if (isIOS) {
+    if (!localStorage.getItem(INSTALL_DISMISSED_KEY)) setTimeout(() => document.getElementById('modal-ios-install')?.classList.remove('hidden'), 3000);
+    return;
+  }
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredInstallPrompt = e;
+    if (!localStorage.getItem(INSTALL_DISMISSED_KEY)) setTimeout(() => document.getElementById('install-banner')?.classList.remove('hidden'), 2000);
+    document.getElementById('install-btn')?.classList.remove('hidden');
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    document.getElementById('install-btn')?.classList.add('hidden');
+    document.getElementById('install-banner')?.classList.add('hidden');
+    toast('✓ Aplicație instalată!', 'success');
+  });
+}
+function showAndroidBanner() { document.getElementById('install-banner')?.classList.remove('hidden'); }
+function showIOSBanner() { document.getElementById('modal-ios-install')?.classList.remove('hidden'); }
+function installApp() {
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) { showIOSBanner(); return; }
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(() => {
+      deferredInstallPrompt = null;
+      document.getElementById('install-btn')?.classList.add('hidden');
+      document.getElementById('install-banner')?.classList.add('hidden');
+    });
+  }
+}
+function dismissInstallBanner() {
+  document.getElementById('install-banner')?.classList.add('hidden');
+  document.getElementById('install-btn')?.classList.add('hidden');
+  localStorage.setItem(INSTALL_DISMISSED_KEY, Date.now().toString());
+}
+function clearAllData() {
+  if (!confirm('Stergi TOATE datele? Ireversibil!')) return;
+  localStorage.clear(); sessions = []; bowConfig = { name: '', poundage: '', type: 'recurve' };
+  applyBowUI(); renderHistory(); renderGlobalStats(); toast('Date sterse');
+}
