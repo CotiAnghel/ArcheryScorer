@@ -1165,7 +1165,7 @@ function renderGraphicTarget() {
   endArrows.forEach((a) => {
     if (a.xMm === undefined) return;
     const px = CX + a.xMm * scale;
-    const py = CY + a.yMm * scale;
+    const py = CY - a.yMm * scale; // yMm: sus pozitiv, SVG Y inversat
     svg.appendChild(mk('circle', { cx:px, cy:py, r:5, fill:arrowDotColor(a.score), stroke:'#fff','stroke-width':'1.5',opacity:'0.95' }));
     const t = mk('text', { x:px+7, y:py+4, fill:'#fff','font-size':'8','font-family':'monospace','font-weight':'bold','text-shadow':'0 0 2px #000' });
     t.textContent = a.score;
@@ -1221,7 +1221,7 @@ function renderGraphicTarget() {
     endArrows.forEach(a => {
       if (a.xMm === undefined) return;
       const apx = (zc - offX*ZOOM_FACTOR) + a.xMm * zScale;
-      const apy = (zc - offY*ZOOM_FACTOR) + a.yMm * zScale;
+      const apy = (zc + offY*ZOOM_FACTOR) - a.yMm * zScale;
       zSvg += `<circle cx="${apx}" cy="${apy}" r="3" fill="${arrowDotColor(a.score)}" stroke="#fff" stroke-width="1"/>`;
     });
     zSvg += '</svg>';
@@ -1294,7 +1294,7 @@ function addArrowGraphic(score, hour, xMm, yMm, distMm) {
     if (endArrows.length >= ape) { toast('Seria completă! Salvează seria.'); return; }
   }
   endArrows.push({ score, position: hour,
-    xMm: +xMm.toFixed(1), yMm: +yMm.toFixed(1), distMm: +distMm.toFixed(1) });
+    xMm: +xMm.toFixed(1), yMm: +(-yMm).toFixed(1), distMm: +distMm.toFixed(1) });
   renderGraphicTarget();
   updateEndUI();
   toast(`Sg.${endArrows.length}: ${score} · ora ${hour} · ${distMm.toFixed(0)}mm față de centru`, 'success');
