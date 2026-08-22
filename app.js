@@ -1007,7 +1007,15 @@ function renderCentrajSection(session, containerId) {
       <div class="centraj-info">
         <div class="centraj-stat">
           <span class="centraj-label">Centru sesiune</span>
-          <span class="centraj-value" style="color:${distColor}">${distLabel}</span>
+          <span class="centraj-value">
+            X: ${sessionCenter.cx > 0 ? '+' : ''}${sessionCenter.cx} ${sessionCenter.unit || 'u'}
+            &nbsp;·&nbsp;
+            Y: ${sessionCenter.cy > 0 ? '+' : ''}${sessionCenter.cy} ${sessionCenter.unit || 'u'}
+          </span>
+        </div>
+        <div class="centraj-stat">
+          <span class="centraj-label">Distanță centru</span>
+          <span class="centraj-value" style="color:${distColor}">${sessionCenter.dist} ${sessionCenter.unit || 'u'} — ${distLabel}</span>
         </div>
         <div class="centraj-stat">
           <span class="centraj-label">Direcție eroare</span>
