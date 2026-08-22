@@ -912,9 +912,6 @@ function groupCenter(arrows) {
   const angleDeg = (Math.atan2(cx, cy) * 180 / Math.PI + 360) % 360;
   const hour = ((angleDeg / 360 * 12) % 12) || 12;
 
-  // _cx/_cy sunt valorile normalizate pentru SVG (în unități 0-10)
-  const svgScale = hasExact ? (1/10) : 1; // mm/10 = unitati SVG
-
   return {
     cx: +cx.toFixed(hasExact ? 1 : 2),
     cy: +cy.toFixed(hasExact ? 1 : 2),
@@ -923,10 +920,12 @@ function groupCenter(arrows) {
     dist: +dist.toFixed(hasExact ? 1 : 2),
     count: coords.length,
     unit, hasExact,
-    _cx: cx * svgScale,
-    _cy: cy * svgScale,
-    _spread: spread * svgScale,
-    _dist: dist * svgScale
+    // _cx/_cy: in mm (hasExact) sau in unitati 0-10.5 (estimated)
+    // toSVG stie sa le converteasca corect
+    _cx: cx,
+    _cy: cy,
+    _spread: spread,
+    _dist: dist
   };
 }
 
@@ -962,9 +961,21 @@ function renderCentrajSection(session, containerId) {
   const cx = svgSize / 2;
   const cy = svgSize / 2;
   const maxR = 82;
-  const scale = maxR / 10.5;
+  const scaleUnit = maxR / 10.5; // px per unitate SVG
 
-  function toSVG(x, y) { return { sx: cx + x * scale, sy: cy - y * scale }; }
+  // Daca avem coordonate exacte in mm, le convertim in unitati SVG
+  // folosind diametrul tintei din sesiune
+  const targetKey = session && session.config && session.config.target;
+  const targetDiameter = (targetKey && typeof TARGET_SPECS !== 'undefined' && TARGET_SPECS[targetKey])
+    ? TARGET_SPECS[targetKey].diameter : 1220;
+  const mmPerUnit = (targetDiameter / 2) / 10.5; // mm per unitate SVG
+
+  function toSVG(x, y, isExact) {
+    // Daca e exacte (mm): convertim in unitati SVG
+    const ux = isExact ? x / mmPerUnit : x;
+    const uy = isExact ? y / mmPerUnit : y;
+    return { sx: cx + ux * scaleUnit, sy: cy - uy * scaleUnit };
+  }
 
   let svg = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}" class="centraj-svg">`;
   [{ r: 10.5, fill: '#f0f0f0' }, { r: 9.5, fill: '#1a1a1a' },
@@ -979,13 +990,13 @@ function renderCentrajSection(session, containerId) {
 
   const colors = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316','#ef4444','#06b6d4','#84cc16'];
   endCenters.forEach((ec, i) => {
-    const p = toSVG(ec.center._cx ?? ec.center.cx, ec.center._cy ?? ec.center.cy);
+    const p = toSVG(ec.center._cx ?? ec.center.cx, ec.center._cy ?? ec.center.cy, ec.center.hasExact);
     const col = colors[i % colors.length];
     svg += `<circle cx="${p.sx}" cy="${p.sy}" r="4" fill="${col}" opacity="0.85"/>`;
     svg += `<text x="${p.sx+5}" y="${p.sy+4}" fill="${col}" font-size="8" font-family="monospace" font-weight="bold">S${ec.endNum}</text>`;
   });
 
-  const sc = toSVG(sessionCenter._cx ?? sessionCenter.cx, sessionCenter._cy ?? sessionCenter.cy);
+  const sc = toSVG(sessionCenter._cx ?? sessionCenter.cx, sessionCenter._cy ?? sessionCenter.cy, sessionCenter.hasExact);
   svg += `<line x1="${cx}" y1="${cy}" x2="${sc.sx}" y2="${sc.sy}" stroke="#fff" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.7"/>`;
   svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="7" fill="none" stroke="#fff" stroke-width="2.5"/>`;
   svg += `<circle cx="${sc.sx}" cy="${sc.sy}" r="2.5" fill="#fff"/>`;
