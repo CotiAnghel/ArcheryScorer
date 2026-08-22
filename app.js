@@ -948,7 +948,8 @@ function renderCentrajSection(session, containerId) {
   const scaleUnit = maxR / 10.5; // px per unitate (mod numeric)
   // scaleExact: px per mm, bazat pe tipul tintei
   // maxR px = diameter/2 mm => scaleExact = maxR / (diameter/2)
-  const targetKey = currentSession && currentSession.config && currentSession.config.target;
+  // Preia tipul tintei din sesiunea afisata (nu currentSession care poate fi null)
+  const targetKey = session && session.config && session.config.target;
   const targetSpec = (targetKey && TARGET_SPECS[targetKey]) ? TARGET_SPECS[targetKey] : TARGET_SPECS['122cm_10ring'];
   const scaleExact = maxR / (targetSpec.diameter / 2); // px per mm
 
