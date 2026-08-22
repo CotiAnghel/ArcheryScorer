@@ -978,7 +978,7 @@ function renderCentrajSection(session, containerId) {
    { r: 3.5,  fill: '#f59e0b' }, { r: 1.5,  fill: '#fbbf24' },
    { r: 0.5,  fill: '#fde68a' }
   ].forEach(ring => {
-    svg += `<circle cx="${cx}" cy="${cy}" r="${ring.r * scale}" fill="${ring.fill}" opacity="0.75"/>`;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${ring.r * scaleUnit}" fill="${ring.fill}" opacity="0.75"/>`;
   });
   svg += `<line x1="${cx-maxR}" y1="${cy}" x2="${cx+maxR}" y2="${cy}" stroke="#fff" stroke-width="0.5" opacity="0.3"/>`;
   svg += `<line x1="${cx}" y1="${cy-maxR}" x2="${cx}" y2="${cy+maxR}" stroke="#fff" stroke-width="0.5" opacity="0.3"/>`;
