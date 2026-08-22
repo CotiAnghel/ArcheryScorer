@@ -178,6 +178,7 @@ window.addEventListener('DOMContentLoaded', () => {
   applyBowUI();
   renderHistory();
   renderGlobalStats();
+  renderEvolutionChart();
   document.getElementById('origin-display').textContent = location.origin;
 
   // Verifică dacă există o sesiune neterminată
@@ -671,6 +672,7 @@ function finishSession() {
   cancelSession(false);
 
   toast(`✓ Sesiune salvată! Total: ${saved.totalScore} pt`, 'success');
+  renderEvolutionChart();
   renderHistory();
 
   // Google Sheets sync (Apps Script)
@@ -1327,6 +1329,106 @@ function addArrowGraphic(score, hour, xMm, yMm, distMm) {
   renderGraphicTarget();
   updateEndUI();
   toast(`Sg.${endArrows.length}: ${score} · ora ${hour} · ${distMm.toFixed(0)}mm față de centru`, 'success');
+}
+
+
+// ── Grafic evoluție ────────────────────────────────────────
+function renderEvolutionChart() {
+  const el = document.getElementById('evolution-chart');
+  if (!el) return;
+
+  const trainings = sessions.filter(s => s.type === 'training' && s.ends && s.ends.length > 0);
+
+  if (!trainings.length) {
+    el.innerHTML = '<p class="evolution-empty">Niciun antrenament înregistrat încă.</p>';
+    return;
+  }
+
+  const W = 340, H = 240;
+  const PAD = { top: 16, right: 16, bottom: 32, left: 36 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+
+  // X = numarul seriei, Y = punctajul
+  let maxEnds = 0, maxScore = 0, minScore = Infinity;
+  trainings.forEach(s => {
+    s.ends.forEach(end => {
+      if ((end.endNumber||1) > maxEnds) maxEnds = end.endNumber||1;
+      if (end.total > maxScore) maxScore = end.total;
+      if (end.total < minScore) minScore = end.total;
+    });
+  });
+  maxScore = Math.ceil(maxScore / 5) * 5;
+  minScore = Math.max(0, Math.floor((minScore - 2) / 5) * 5);
+  if (maxEnds < 2) maxEnds = 2;
+
+  // scX = pozitia orizontala a seriei N
+  const scX = n => PAD.left + (n - 1) / Math.max(maxEnds - 1, 1) * plotW;
+  // scY = pozitia verticala a punctajului (sus = mai mare)
+  const scY = score => PAD.top + plotH - (score - minScore) / (maxScore - minScore) * plotH;
+
+  const COLORS = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316',
+                  '#ef4444','#06b6d4','#84cc16','#f59e0b','#8b5cf6'];
+
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H}" class="evolution-svg">`;
+  svg += `<rect width="${W}" height="${H}" fill="var(--bg2)" rx="10"/>`;
+
+  // Grid orizontal (punctaj)
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const score = minScore + (maxScore - minScore) * i / yTicks;
+    const y = scY(score);
+    svg += `<line x1="${PAD.left}" y1="${y}" x2="${PAD.left + plotW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+    svg += `<text x="${PAD.left - 4}" y="${y + 3}" text-anchor="end" fill="var(--text-dim)" font-size="9" font-family="monospace">${Math.round(score)}</text>`;
+  }
+
+  // Grid vertical (serii)
+  for (let e = 1; e <= maxEnds; e++) {
+    const x = scX(e);
+    svg += `<line x1="${x}" y1="${PAD.top}" x2="${x}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="0.3"/>`;
+    if (e === 1 || e % Math.ceil(maxEnds / 8) === 0 || e === maxEnds) {
+      svg += `<text x="${x}" y="${PAD.top + plotH + 14}" text-anchor="middle" fill="var(--text-dim)" font-size="9" font-family="monospace">S${e}</text>`;
+    }
+  }
+
+  // Axe
+  svg += `<line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="1"/>`;
+  svg += `<line x1="${PAD.left}" y1="${PAD.top + plotH}" x2="${PAD.left + plotW}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="1"/>`;
+
+  // Etichete axe
+  svg += `<text x="${PAD.left + plotW/2}" y="${H - 2}" text-anchor="middle" fill="var(--text-dim)" font-size="8">Seria</text>`;
+  svg += `<text x="8" y="${PAD.top + plotH/2}" text-anchor="middle" fill="var(--text-dim)" font-size="8" transform="rotate(-90,8,${PAD.top + plotH/2})">Punctaj</text>`;
+
+  // Linii per antrenament (cele mai recente 10)
+  const toShow = trainings.slice().reverse().slice(0, 10);
+  toShow.forEach((session, si) => {
+    const col = COLORS[si % COLORS.length];
+    const date = new Date(session.date).toLocaleDateString('ro-RO', {day:'2-digit', month:'2-digit'});
+    const ends = session.ends.slice().sort((a, b) => (a.endNumber||0) - (b.endNumber||0));
+
+    // Linie
+    if (ends.length > 1) {
+      const points = ends.map(end => `${scX(end.endNumber||1).toFixed(1)},${scY(end.total).toFixed(1)}`).join(' ');
+      svg += `<polyline points="${points}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
+    }
+
+    // Puncte
+    ends.forEach(end => {
+      const x = scX(end.endNumber||1), y = scY(end.total);
+      svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${col}" stroke="var(--bg2)" stroke-width="1"/>`;
+    });
+
+    // Label data langa ultima serie
+    if (ends.length > 0) {
+      const lastEnd = ends[ends.length - 1];
+      const lx = scX(lastEnd.endNumber||1) + 4;
+      const ly = scY(lastEnd.total) + 3;
+      svg += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" fill="${col}" font-size="7" font-family="monospace">${date}</text>`;
+    }
+  });
+
+  svg += '</svg>';
+  el.innerHTML = svg;
 }
 
 // ── Export Excel ───────────────────────────────────────
