@@ -763,7 +763,8 @@ function resumeFromHistory() {
   // Treci la tab-ul Home și reia sesiunea
   switchTab('home');
   currentSession = draft.session;
-  currentEndIndex = draft.currentEndIndex || 0;
+  // Asigura-te ca currentEndIndex e consistent cu seriile deja salvate
+  currentEndIndex = Math.max(draft.currentEndIndex || 0, (draft.session.ends || []).length);
   endArrows = draft.endArrows || [];
   editingArrowIndex = -1;
   initSessionUI();
@@ -791,17 +792,17 @@ function openSessionDetail(id) {
     </div>
     <div class="detail-ends">`;
 
-  s.ends.forEach(end => {
+  s.ends.forEach((end, idx) => {
     const chips = end.arrows.map(a =>
       `<div class="arrow-chip ${scoreClass(a.score)}" style="padding:.2rem .4rem;font-size:.78rem;">
         <span>${a.score}</span>
         ${a.position ? `<span class="chip-pos">${a.position}h</span>` : ''}
       </div>`
     ).join('');
-    html += `<div class="detail-end-row">
-      <span class="detail-end-num">S${end.endNumber}</span>
+    html += `<div class="detail-end-row" id="end-row-${idx}">
+      <span class="detail-end-num" id="end-num-${idx}">S${end.endNumber}</span>
       <div class="detail-end-arrows">${chips}</div>
-      <span class="detail-end-total">${end.total}</span>
+      <span class="detail-end-total" id="end-total-${idx}">${end.total}</span>
     </div>`;
   });
 
@@ -1332,6 +1333,55 @@ function addArrowGraphic(score, hour, xMm, yMm, distMm) {
 }
 
 
+
+// ── Editare serii din istoric ──────────────────────────────
+let editEndsMode = false;
+
+function toggleEditEnds() {
+  editEndsMode = !editEndsMode;
+  const btn = document.getElementById('btn-edit-ends');
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s) return;
+
+  if (editEndsMode) {
+    if (btn) btn.textContent = '💾 Salvează';
+    s.ends.forEach((end, idx) => {
+      const numEl = document.getElementById('end-num-' + idx);
+      const totalEl = document.getElementById('end-total-' + idx);
+      if (numEl) numEl.innerHTML =
+        '<input type="number" class="end-edit-input" id="edit-num-' + idx + '" value="' + end.endNumber + '" min="1" max="99">';
+      if (totalEl) totalEl.innerHTML =
+        '<input type="number" class="end-edit-input" id="edit-total-' + idx + '" value="' + end.total + '" min="0" max="999">';
+    });
+  } else {
+    if (btn) btn.textContent = '✎ Editează';
+    let changed = false;
+    s.ends.forEach((end, idx) => {
+      const numInput = document.getElementById('edit-num-' + idx);
+      const totalInput = document.getElementById('edit-total-' + idx);
+      if (numInput) {
+        const v = parseInt(numInput.value);
+        if (!isNaN(v) && v !== end.endNumber) { end.endNumber = v; changed = true; }
+      }
+      if (totalInput) {
+        const v = parseInt(totalInput.value);
+        if (!isNaN(v) && v !== end.total) { end.total = v; changed = true; }
+      }
+    });
+    if (changed) {
+      s.totalScore = s.ends.reduce((sum, e) => sum + (e.total || 0), 0);
+      const allArrows = s.ends.flatMap(e => e.arrows);
+      s.totalArrows = allArrows.length;
+      s.avgPerArrow = s.totalArrows > 0 ? (s.totalScore / s.totalArrows).toFixed(2) : 0;
+      save();
+      toast('Serii actualizate ✓', 'success');
+      renderEvolutionChart();
+    }
+    openSessionDetail(selectedSessionId);
+    editEndsMode = false;
+  }
+}
+
 // ── Grafic evoluție ────────────────────────────────────────
 function renderEvolutionChart() {
   const el = document.getElementById('evolution-chart');
@@ -1791,7 +1841,7 @@ function resumeDraft() {
   document.getElementById('modal-draft-recovery')?.remove();
 
   currentSession = draft.session;
-  currentEndIndex = draft.currentEndIndex || 0;
+  currentEndIndex = Math.max(draft.currentEndIndex || 0, (draft.session.ends || []).length);
   endArrows = draft.endArrows || [];
   editingArrowIndex = -1;
 
