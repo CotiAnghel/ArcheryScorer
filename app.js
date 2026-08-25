@@ -171,14 +171,63 @@ function load() {
   loadScriptConfig();
 }
 
+
+// ── Index incremental sesiuni ──────────────────────────────
+function assignIndexes() {
+  // Sorteaza de la cel mai vechi la cel mai nou
+  const sorted = sessions.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  let trainIdx = 1, compIdx = 1;
+  let changed = false;
+
+  // Colecteaza indexuri existente pentru detectie duplicate
+  const usedTrainIdx = new Set();
+  const usedCompIdx = new Set();
+  let hasDuplicates = false;
+
+  sorted.forEach(s => {
+    if (s.type === 'training') {
+      if (s.sessionIndex && usedTrainIdx.has(s.sessionIndex)) hasDuplicates = true;
+      if (s.sessionIndex) usedTrainIdx.add(s.sessionIndex);
+    } else {
+      if (s.sessionIndex && usedCompIdx.has(s.sessionIndex)) hasDuplicates = true;
+      if (s.sessionIndex) usedCompIdx.add(s.sessionIndex);
+    }
+  });
+
+  // Daca exista duplicate sau sesiuni fara index, renumeroteaza tot
+  const needsRenumber = hasDuplicates || sorted.some(s => !s.sessionIndex);
+
+  if (needsRenumber) {
+    sorted.forEach(s => {
+      const newIdx = s.type === 'training' ? trainIdx++ : compIdx++;
+      if (s.sessionIndex !== newIdx) {
+        s.sessionIndex = newIdx;
+        changed = true;
+      } else {
+        if (s.type === 'training') trainIdx = newIdx + 1;
+        else compIdx = newIdx + 1;
+      }
+    });
+    if (changed) save();
+    if (hasDuplicates) console.warn('Index duplicate detectate si corectate automat');
+  }
+}
+
+function getSessionLabel(session) {
+  const type = session.type === 'training' ? 'Ant' : 'Cnc';
+  return `${type}.${session.sessionIndex || '?'}`;
+}
+
 // ── Init ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   initInstallPrompt();
   load();
   applyBowUI();
+  assignIndexes();
   renderHistory();
   renderGlobalStats();
   renderEvolutionChart();
+  renderCompetitionCharts();
   document.getElementById('origin-display').textContent = location.origin;
 
   // Verifică dacă există o sesiune neterminată
@@ -666,6 +715,7 @@ function finishSession() {
 
   sessions.unshift(currentSession);
   save();
+  assignIndexes();
   clearDraft();
 
   const saved = currentSession;
@@ -673,6 +723,7 @@ function finishSession() {
 
   toast(`✓ Sesiune salvată! Total: ${saved.totalScore} pt`, 'success');
   renderEvolutionChart();
+  renderCompetitionCharts();
   renderHistory();
 
   // Google Sheets sync (Apps Script)
@@ -1334,74 +1385,189 @@ function addArrowGraphic(score, hour, xMm, yMm, distMm) {
 
 
 
-// ── Editare serii din istoric ──────────────────────────────
+// ── Editare completa serii/sageti din Istoric ─────────────
 let editEndsMode = false;
 
 function toggleEditEnds() {
   editEndsMode = !editEndsMode;
   const btn = document.getElementById('btn-edit-ends');
-  const s = sessions.find(x => x.id === selectedSessionId);
-  if (!s) return;
-
   if (editEndsMode) {
     if (btn) btn.textContent = '💾 Salvează';
-    s.ends.forEach((end, idx) => {
-      const numEl = document.getElementById('end-num-' + idx);
-      const totalEl = document.getElementById('end-total-' + idx);
-      if (numEl) numEl.innerHTML =
-        '<input type="number" class="end-edit-input" id="edit-num-' + idx + '" value="' + end.endNumber + '" min="1" max="99">';
-      if (totalEl) totalEl.innerHTML =
-        '<input type="number" class="end-edit-input" id="edit-total-' + idx + '" value="' + end.total + '" min="0" max="999">';
-    });
+    renderEditMode();
   } else {
-    if (btn) btn.textContent = '✎ Editează';
-    let changed = false;
-    s.ends.forEach((end, idx) => {
-      const numInput = document.getElementById('edit-num-' + idx);
-      const totalInput = document.getElementById('edit-total-' + idx);
-      if (numInput) {
-        const v = parseInt(numInput.value);
-        if (!isNaN(v) && v !== end.endNumber) { end.endNumber = v; changed = true; }
-      }
-      if (totalInput) {
-        const v = parseInt(totalInput.value);
-        if (!isNaN(v) && v !== end.total) { end.total = v; changed = true; }
-      }
-    });
-    if (changed) {
-      s.totalScore = s.ends.reduce((sum, e) => sum + (e.total || 0), 0);
-      const allArrows = s.ends.flatMap(e => e.arrows);
-      s.totalArrows = allArrows.length;
-      s.avgPerArrow = s.totalArrows > 0 ? (s.totalScore / s.totalArrows).toFixed(2) : 0;
-      save();
-      toast('Serii actualizate ✓', 'success');
-      renderEvolutionChart();
-    }
-    openSessionDetail(selectedSessionId);
-    editEndsMode = false;
+    saveEditMode();
   }
 }
 
-// ── Grafic evoluție ────────────────────────────────────────
-function renderEvolutionChart() {
-  const el = document.getElementById('evolution-chart');
-  if (!el) return;
+function renderEditMode() {
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s) return;
+  let html = '';
 
-  const trainings = sessions.filter(s => s.type === 'training' && s.ends && s.ends.length > 0);
+  s.ends.forEach((end, ei) => {
+    html += `<div class="edit-end-block" id="edit-end-${ei}">
+      <div class="edit-end-header">
+        <span class="edit-end-label">Seria</span>
+        <input type="number" class="end-edit-input" id="edit-num-${ei}" value="${end.endNumber}" min="1" max="99" style="width:3rem">
+        <button onclick="deleteEndFromEdit(${ei})" class="btn-danger-sm" style="margin-left:auto">🗑 Serie</button>
+      </div>
+      <div class="edit-arrows-wrap" id="edit-arrows-${ei}">`;
 
-  if (!trainings.length) {
-    el.innerHTML = '<p class="evolution-empty">Niciun antrenament înregistrat încă.</p>';
-    return;
+    end.arrows.forEach((a, ai) => {
+      html += `<div class="edit-arrow-row" id="edit-arrow-${ei}-${ai}">
+        <select class="score-select edit-score-sel" id="edit-score-${ei}-${ai}" style="width:5rem">
+          ${['X','10','9','8','7','6','5','4','3','2','1','M'].map(v =>
+            `<option value="${v}"${v===a.score?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <input type="number" class="end-edit-input" id="edit-pos-${ei}-${ai}"
+          value="${a.position||''}" min="1" max="12" placeholder="oră" style="width:3rem">
+        <button onclick="deleteArrowFromEdit(${ei},${ai})" class="btn-danger-sm">✕</button>
+      </div>`;
+    });
+
+    html += `</div>
+      <button onclick="addArrowToEnd(${ei})" class="btn-secondary" style="font-size:.75rem;padding:.3rem .6rem;margin-top:.4rem">+ Săgeată</button>
+    </div>`;
+  });
+
+  html += `<button onclick="addEndToSession()" class="btn-secondary" style="width:100%;margin-top:.5rem;font-size:.8rem">+ Serie nouă</button>`;
+
+  const detailContent = document.getElementById('detail-content');
+  if (detailContent) {
+    // Pastreaza summary, inlocuieste doar ends
+    const summary = detailContent.querySelector('.detail-summary');
+    const meta = detailContent.querySelector('.detail-meta');
+    detailContent.innerHTML =
+      (summary ? summary.outerHTML : '') +
+      (meta ? meta.outerHTML : '') +
+      `<div id="edit-ends-container">${html}</div>`;
   }
+}
 
-  const W = 340, H = 240;
-  const PAD = { top: 16, right: 16, bottom: 32, left: 36 };
+function saveEditMode() {
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s) return;
+  const btn = document.getElementById('btn-edit-ends');
+  if (btn) btn.textContent = '✎ Editează';
+
+  let changed = false;
+  s.ends.forEach((end, ei) => {
+    const numInput = document.getElementById('edit-num-' + ei);
+    if (numInput) {
+      const v = parseInt(numInput.value);
+      if (!isNaN(v) && v !== end.endNumber) { end.endNumber = v; changed = true; }
+    }
+    end.arrows.forEach((a, ai) => {
+      const scoreEl = document.getElementById('edit-score-' + ei + '-' + ai);
+      const posEl = document.getElementById('edit-pos-' + ei + '-' + ai);
+      if (scoreEl && scoreEl.value !== a.score) { a.score = scoreEl.value; changed = true; }
+      if (posEl) {
+        const pos = parseInt(posEl.value) || null;
+        if (pos !== a.position) { a.position = pos; changed = true; }
+      }
+    });
+    // Recalculeaza totalul seriei
+    end.total = end.arrows.reduce((s, a) => s + scoreNumeric(a.score), 0);
+  });
+
+  if (changed) {
+    recalcSession(s);
+    save();
+    toast('Sesiune actualizată ✓', 'success');
+    renderEvolutionChart();
+    renderCompetitionCharts();
+  }
+  editEndsMode = false;
+  openSessionDetail(selectedSessionId);
+}
+
+function recalcSession(s) {
+  const allArrows = s.ends.flatMap(e => e.arrows);
+  s.totalScore = s.ends.reduce((sum, e) => sum + (e.total||0), 0);
+  s.totalXs = allArrows.filter(a => a.score === 'X').length;
+  s.totalArrows = allArrows.length;
+  s.avgPerArrow = s.totalArrows > 0 ? (s.totalScore / s.totalArrows).toFixed(2) : 0;
+}
+
+function deleteEndFromEdit(ei) {
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s || !confirm('Ștergi seria ' + (s.ends[ei]?.endNumber||ei+1) + '?')) return;
+  s.ends.splice(ei, 1);
+  recalcSession(s);
+  save();
+  toast('Serie ștearsă');
+  renderEditMode();
+}
+
+function deleteArrowFromEdit(ei, ai) {
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s) return;
+  // Salveaza valorile curente inainte de stergere
+  s.ends.forEach((end, eidx) => {
+    end.arrows.forEach((a, aidx) => {
+      const scoreEl = document.getElementById('edit-score-' + eidx + '-' + aidx);
+      const posEl = document.getElementById('edit-pos-' + eidx + '-' + aidx);
+      if (scoreEl) a.score = scoreEl.value;
+      if (posEl) a.position = parseInt(posEl.value) || null;
+    });
+    const numInput = document.getElementById('edit-num-' + eidx);
+    if (numInput) end.endNumber = parseInt(numInput.value) || end.endNumber;
+  });
+  s.ends[ei].arrows.splice(ai, 1);
+  s.ends[ei].total = s.ends[ei].arrows.reduce((sum, a) => sum + scoreNumeric(a.score), 0);
+  recalcSession(s);
+  save();
+  toast('Săgeată ștearsă');
+  renderEditMode();
+}
+
+function addArrowToEnd(ei) {
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s) return;
+  // Salveaza starea curenta
+  s.ends.forEach((end, eidx) => {
+    end.arrows.forEach((a, aidx) => {
+      const scoreEl = document.getElementById('edit-score-' + eidx + '-' + aidx);
+      const posEl = document.getElementById('edit-pos-' + eidx + '-' + aidx);
+      if (scoreEl) a.score = scoreEl.value;
+      if (posEl) a.position = parseInt(posEl.value) || null;
+    });
+  });
+  s.ends[ei].arrows.push({ score: 'M', position: null });
+  renderEditMode();
+}
+
+function addEndToSession() {
+  const s = sessions.find(x => x.id === selectedSessionId);
+  if (!s) return;
+  // Salveaza starea curenta
+  s.ends.forEach((end, eidx) => {
+    end.arrows.forEach((a, aidx) => {
+      const scoreEl = document.getElementById('edit-score-' + eidx + '-' + aidx);
+      const posEl = document.getElementById('edit-pos-' + eidx + '-' + aidx);
+      if (scoreEl) a.score = scoreEl.value;
+      if (posEl) a.position = parseInt(posEl.value) || null;
+    });
+    const numInput = document.getElementById('edit-num-' + eidx);
+    if (numInput) end.endNumber = parseInt(numInput.value) || end.endNumber;
+  });
+  const maxEnd = s.ends.reduce((m, e) => Math.max(m, e.endNumber||0), 0);
+  s.ends.push({ endNumber: maxEnd + 1, arrows: [], total: 0 });
+  renderEditMode();
+}
+
+// ── Functie generica grafic serii ─────────────────────────
+function buildSeriesChart(sessionList, title) {
+  if (!sessionList.length) return '';
+
+  const W = 340, H = 220;
+  const PAD = { top: 14, right: 16, bottom: 30, left: 38 };
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
+  const LEGEND_ROW_H = 16;
 
-  // X = numarul seriei, Y = punctajul
   let maxEnds = 0, maxScore = 0, minScore = Infinity;
-  trainings.forEach(s => {
+  sessionList.forEach(s => {
     s.ends.forEach(end => {
       if ((end.endNumber||1) > maxEnds) maxEnds = end.endNumber||1;
       if (end.total > maxScore) maxScore = end.total;
@@ -1411,74 +1577,121 @@ function renderEvolutionChart() {
   maxScore = Math.ceil(maxScore / 5) * 5;
   minScore = Math.max(0, Math.floor((minScore - 2) / 5) * 5);
   if (maxEnds < 2) maxEnds = 2;
+  if (maxScore === minScore) { maxScore += 5; minScore = Math.max(0, minScore - 5); }
 
-  // scX = pozitia orizontala a seriei N
   const scX = n => PAD.left + (n - 1) / Math.max(maxEnds - 1, 1) * plotW;
-  // scY = pozitia verticala a punctajului (sus = mai mare)
   const scY = score => PAD.top + plotH - (score - minScore) / (maxScore - minScore) * plotH;
 
   const COLORS = ['#e8c44a','#3b82f6','#a855f7','#10b981','#f97316',
                   '#ef4444','#06b6d4','#84cc16','#f59e0b','#8b5cf6'];
 
-  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H}" class="evolution-svg">`;
-  svg += `<rect width="${W}" height="${H}" fill="var(--bg2)" rx="10"/>`;
+  // Legenda height
+  const toShow = sessionList.slice().sort((a,b) => new Date(a.date)-new Date(b.date)).slice(-10);
+  const legendH = Math.ceil(toShow.length / 2) * LEGEND_ROW_H + 8;
+  const totalH = H + legendH;
 
-  // Grid orizontal (punctaj)
-  const yTicks = 5;
-  for (let i = 0; i <= yTicks; i++) {
-    const score = minScore + (maxScore - minScore) * i / yTicks;
-    const y = scY(score);
-    svg += `<line x1="${PAD.left}" y1="${y}" x2="${PAD.left + plotW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
-    svg += `<text x="${PAD.left - 4}" y="${y + 3}" text-anchor="end" fill="var(--text-dim)" font-size="9" font-family="monospace">${Math.round(score)}</text>`;
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${totalH}" class="evolution-svg">`;
+  svg += `<rect width="${W}" height="${totalH}" fill="var(--bg2)" rx="10"/>`;
+
+  // Titlu
+  if (title) {
+    svg += `<text x="${W/2}" y="11" text-anchor="middle" fill="var(--text-muted)" font-size="9" font-family="monospace">${title}</text>`;
   }
 
-  // Grid vertical (serii)
+  // Grid Y
+  for (let i = 0; i <= 5; i++) {
+    const score = minScore + (maxScore - minScore) * i / 5;
+    const y = scY(score);
+    svg += `<line x1="${PAD.left}" y1="${y}" x2="${PAD.left+plotW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+    svg += `<text x="${PAD.left-4}" y="${y+3}" text-anchor="end" fill="var(--text-dim)" font-size="9" font-family="monospace">${Math.round(score)}</text>`;
+  }
+
+  // Grid X
   for (let e = 1; e <= maxEnds; e++) {
     const x = scX(e);
-    svg += `<line x1="${x}" y1="${PAD.top}" x2="${x}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="0.3"/>`;
-    if (e === 1 || e % Math.ceil(maxEnds / 8) === 0 || e === maxEnds) {
-      svg += `<text x="${x}" y="${PAD.top + plotH + 14}" text-anchor="middle" fill="var(--text-dim)" font-size="9" font-family="monospace">S${e}</text>`;
+    svg += `<line x1="${x}" y1="${PAD.top}" x2="${x}" y2="${PAD.top+plotH}" stroke="var(--border)" stroke-width="0.3"/>`;
+    if (e === 1 || e % Math.ceil(maxEnds/8) === 0 || e === maxEnds) {
+      svg += `<text x="${x}" y="${PAD.top+plotH+13}" text-anchor="middle" fill="var(--text-dim)" font-size="9" font-family="monospace">S${e}</text>`;
     }
   }
 
   // Axe
-  svg += `<line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="1"/>`;
-  svg += `<line x1="${PAD.left}" y1="${PAD.top + plotH}" x2="${PAD.left + plotW}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="1"/>`;
+  svg += `<line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${PAD.top+plotH}" stroke="var(--border)" stroke-width="1"/>`;
+  svg += `<line x1="${PAD.left}" y1="${PAD.top+plotH}" x2="${PAD.left+plotW}" y2="${PAD.top+plotH}" stroke="var(--border)" stroke-width="1"/>`;
+  svg += `<text x="${PAD.left+plotW/2}" y="${H-1}" text-anchor="middle" fill="var(--text-dim)" font-size="8">Seria</text>`;
+  svg += `<text x="8" y="${PAD.top+plotH/2}" text-anchor="middle" fill="var(--text-dim)" font-size="8" transform="rotate(-90,8,${PAD.top+plotH/2})">Punctaj</text>`;
 
-  // Etichete axe
-  svg += `<text x="${PAD.left + plotW/2}" y="${H - 2}" text-anchor="middle" fill="var(--text-dim)" font-size="8">Seria</text>`;
-  svg += `<text x="8" y="${PAD.top + plotH/2}" text-anchor="middle" fill="var(--text-dim)" font-size="8" transform="rotate(-90,8,${PAD.top + plotH/2})">Punctaj</text>`;
-
-  // Linii per antrenament (cele mai recente 10)
-  const toShow = trainings.slice().reverse().slice(0, 10);
+  // Linii
   toShow.forEach((session, si) => {
     const col = COLORS[si % COLORS.length];
-    const date = new Date(session.date).toLocaleDateString('ro-RO', {day:'2-digit', month:'2-digit'});
-    const ends = session.ends.slice().sort((a, b) => (a.endNumber||0) - (b.endNumber||0));
-
-    // Linie
+    const ends = session.ends.slice().sort((a,b) => (a.endNumber||0)-(b.endNumber||0));
     if (ends.length > 1) {
-      const points = ends.map(end => `${scX(end.endNumber||1).toFixed(1)},${scY(end.total).toFixed(1)}`).join(' ');
-      svg += `<polyline points="${points}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
+      const pts = ends.map(e => `${scX(e.endNumber||1).toFixed(1)},${scY(e.total).toFixed(1)}`).join(' ');
+      svg += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
     }
-
-    // Puncte
     ends.forEach(end => {
       const x = scX(end.endNumber||1), y = scY(end.total);
       svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${col}" stroke="var(--bg2)" stroke-width="1"/>`;
     });
+  });
 
-    // Label data langa ultima serie
-    if (ends.length > 0) {
-      const lastEnd = ends[ends.length - 1];
-      const lx = scX(lastEnd.endNumber||1) + 4;
-      const ly = scY(lastEnd.total) + 3;
-      svg += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" fill="${col}" font-size="7" font-family="monospace">${date}</text>`;
-    }
+  // Legenda
+  const legY0 = H + 6;
+  toShow.forEach((session, si) => {
+    const col = COLORS[si % COLORS.length];
+    const label = getSessionLabel(session);
+    const total = session.totalScore || 0;
+    const col2 = si % 2;
+    const row = Math.floor(si / 2);
+    const lx = col2 === 0 ? 8 : W/2 + 4;
+    const ly = legY0 + row * LEGEND_ROW_H + 10;
+    svg += `<rect x="${lx}" y="${ly-7}" width="12" height="4" rx="2" fill="${col}"/>`;
+    svg += `<text x="${lx+15}" y="${ly}" fill="var(--text-muted)" font-size="8" font-family="monospace">${label} — ${total}pt</text>`;
   });
 
   svg += '</svg>';
-  el.innerHTML = svg;
+  return svg;
+}
+
+// ── Grafic antrenamente ────────────────────────────────────
+function renderEvolutionChart() {
+  const el = document.getElementById('evolution-chart');
+  if (!el) return;
+
+  const trainings = sessions.filter(s => s.type === 'training' && s.ends && s.ends.length > 0);
+  if (!trainings.length) {
+    el.innerHTML = '<p class="evolution-empty">Niciun antrenament înregistrat încă.</p>';
+    return;
+  }
+  el.innerHTML = buildSeriesChart(trainings, 'Antrenamente');
+}
+
+// ── Grafice concursuri per tip ─────────────────────────────
+function renderCompetitionCharts() {
+  const container = document.getElementById('competition-charts');
+  if (!container) return;
+
+  const competitions = sessions.filter(s => s.type === 'competition' && s.ends && s.ends.length > 0);
+  if (!competitions.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  // Grupeaza pe tip de concurs
+  const byType = {};
+  competitions.forEach(s => {
+    const key = s.competition?.id || 'necunoscut';
+    const name = s.competition?.name || 'Concurs';
+    if (!byType[key]) byType[key] = { name, sessions: [] };
+    byType[key].sessions.push(s);
+  });
+
+  let html = '';
+  Object.values(byType).forEach(group => {
+    html += `<h3 class="subsection-title" style="margin-top:1rem">${group.name}</h3>`;
+    html += buildSeriesChart(group.sessions, '');
+  });
+  container.innerHTML = html;
 }
 
 // ── Export Excel ───────────────────────────────────────

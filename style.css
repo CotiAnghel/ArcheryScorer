@@ -1159,3 +1159,37 @@ html, body {
   padding: 0.2rem 0.3rem;
   text-align: center;
 }
+
+/* ── Editare completa serii/sageti ── */
+.edit-end-block {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.edit-end-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.edit-end-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.edit-arrows-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.edit-arrow-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.edit-score-sel {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.4rem;
+}
