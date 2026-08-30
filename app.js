@@ -230,7 +230,6 @@ window.addEventListener('DOMContentLoaded', () => {
   renderGlobalStats();
   renderEvolutionChart();
   renderCompetitionCharts();
-  document.getElementById('origin-display').textContent = location.origin;
 
   // Verifică dacă există o sesiune neterminată
   const draft = loadDraft();
@@ -409,6 +408,7 @@ function initSessionUI() {
   endArrows = [];
   document.getElementById('session-chooser')?.classList?.add('hidden');
   document.querySelector('.session-chooser').classList.add('hidden');
+  document.getElementById('evolution-section').classList.add('hidden');
   document.getElementById('active-session').classList.remove('hidden');
 
   const badge = document.getElementById('session-type-badge');
@@ -740,6 +740,7 @@ function cancelSession(withConfirm = true) {
   endArrows = [];
   editingArrowIndex = -1;
   document.querySelector('.session-chooser').classList.remove('hidden');
+  document.getElementById('evolution-section').classList.remove('hidden');
   document.getElementById('active-session').classList.add('hidden');
   document.getElementById('btn-confirm-end').textContent = '✓ Confirmă seria';
   document.getElementById('running-total').textContent = '0';
