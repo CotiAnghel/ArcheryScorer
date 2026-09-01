@@ -21,8 +21,48 @@ function doPost(e) {
 }
 
 function doGet(e) {
+  if (e.parameter && e.parameter.action === 'info') {
+    return handleInfo();
+  }
+  if (e.parameter && e.parameter.action === 'refreshChart') {
+    return handleRefreshChart();
+  }
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', message: 'Archery Scorer Script activ' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleRefreshChart() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SUMMARY_SHEET);
+  if (!sheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'Foaia ' + SUMMARY_SHEET + ' nu exista' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  buildSummaryChart(sheet);
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', message: 'Grafic regenerat' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleInfo() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets().map(function(sheet) {
+    return {
+      name: sheet.getName(),
+      rows: sheet.getLastRow(),
+      cols: sheet.getLastColumn()
+    };
+  });
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      status: 'ok',
+      spreadsheetName: ss.getName(),
+      spreadsheetUrl: ss.getUrl(),
+      sheetCount: sheets.length,
+      sheets: sheets
+    }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -364,6 +404,58 @@ function updateSummarySheet(ss, newSession) {
   sheet.getRange(lastRow + 1, 1, 1, newRow.length).setValues([newRow]);
   updateSummaryTotals(sheet);
   sheet.autoResizeColumns(1, 11);
+  buildSummaryChart(sheet);
+}
+
+// ── Grafic Scor total & Medie/sageata (ca in aplicatie) ────
+var CHART_TITLE = 'Scor total & Medie/sageata';
+var CHART_STAGING_COL = 14; // N
+
+function buildSummaryChart(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 4) return;
+
+  var data = sheet.getRange(4, 1, lastRow - 3, 11).getValues();
+  var rows = [];
+  data.forEach(function(r) {
+    if (r[1] === 'Antrenament' && r[0]) {
+      rows.push([r[0], r[6], r[8]]); // Data, Total, Medie/sg
+    }
+  });
+
+  // Curata zona de staging si graficele vechi generate de script
+  sheet.getRange(3, CHART_STAGING_COL, Math.max(sheet.getMaxRows() - 2, 1), 3).clearContent();
+  sheet.getCharts().forEach(function(c) {
+    if (c.getOptions().get('title') === CHART_TITLE) sheet.removeChart(c);
+  });
+
+  if (rows.length === 0) return;
+  rows.sort(function(a, b) { return new Date(a[0]) - new Date(b[0]); });
+
+  sheet.getRange(3, CHART_STAGING_COL, 1, 3).setValues([['Data', 'Scor total', 'Medie/sageata']]);
+  sheet.getRange(4, CHART_STAGING_COL, rows.length, 3).setValues(rows);
+  sheet.hideColumns(CHART_STAGING_COL, 3);
+
+  var dataRange = sheet.getRange(3, CHART_STAGING_COL, rows.length + 1, 3);
+  var chart = sheet.newChart()
+    .asComboChart()
+    .addRange(dataRange)
+    .setNumHeaders(1)
+    .setOption('title', CHART_TITLE)
+    .setOption('series', {
+      0: { type: 'line', targetAxisIndex: 0, color: '#e8c44a' },
+      1: { type: 'line', targetAxisIndex: 1, color: '#3b82f6' }
+    })
+    .setOption('vAxes', {
+      0: { title: 'Scor total' },
+      1: { title: 'Medie/sageata', minValue: 0, maxValue: 10 }
+    })
+    .setOption('hAxis', { title: 'Data' })
+    .setOption('width', 700)
+    .setOption('height', 350)
+    .setPosition(15, 1, 0, 0)
+    .build();
+  sheet.insertChart(chart);
 }
 
 function writeSummaryHeaders(sheet) {
