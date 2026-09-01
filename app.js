@@ -230,6 +230,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderGlobalStats();
   renderEvolutionChart();
   renderCompetitionCharts();
+  renderScoreAvgChart();
 
   // Verifică dacă există o sesiune neterminată
   const draft = loadDraft();
@@ -726,6 +727,7 @@ function finishSession() {
   toast(`✓ Sesiune salvată! Total: ${saved.totalScore} pt`, 'success');
   renderEvolutionChart();
   renderCompetitionCharts();
+  renderScoreAvgChart();
   renderHistory();
 
   // Google Sheets sync (Apps Script)
@@ -1479,6 +1481,7 @@ function saveEditMode() {
     toast('Sesiune actualizată ✓', 'success');
     renderEvolutionChart();
     renderCompetitionCharts();
+    renderScoreAvgChart();
   }
   editEndsMode = false;
   openSessionDetail(selectedSessionId);
@@ -1667,6 +1670,103 @@ function renderEvolutionChart() {
     return;
   }
   el.innerHTML = buildSeriesChart(trainings, 'Antrenamente');
+}
+
+// ── Grafic scor total & medie/sageata per antrenament ──────
+function buildScoreAvgChart(trainings) {
+  if (!trainings.length) return '';
+
+  const W = 340, H = 220;
+  const PAD = { top: 14, right: 34, bottom: 34, left: 38 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+
+  const sorted = trainings.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const totals = sorted.map(s => s.totalScore || 0);
+  const avgs = sorted.map(s => parseFloat(s.avgPerArrow) || 0);
+
+  let maxTotal = Math.ceil(Math.max(...totals, 1) / 10) * 10;
+  let maxAvg = Math.ceil(Math.max(...avgs, 1) * 2) / 2;
+
+  const n = sorted.length;
+  const scX = i => n > 1 ? PAD.left + i / (n - 1) * plotW : PAD.left + plotW / 2;
+  const scYTotal = v => PAD.top + plotH - (v / maxTotal) * plotH;
+  const scYAvg = v => PAD.top + plotH - (v / maxAvg) * plotH;
+
+  const COL_TOTAL = '#e8c44a';
+  const COL_AVG = '#3b82f6';
+
+  let svg = `<svg width="100%" viewBox="0 0 ${W} ${H + 26}" class="evolution-svg">`;
+  svg += `<rect width="${W}" height="${H + 26}" fill="var(--bg2)" rx="10"/>`;
+
+  // Grid Y (scala scor total, stanga)
+  for (let i = 0; i <= 5; i++) {
+    const val = maxTotal * i / 5;
+    const y = scYTotal(val);
+    svg += `<line x1="${PAD.left}" y1="${y}" x2="${PAD.left + plotW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+    svg += `<text x="${PAD.left - 4}" y="${y + 3}" text-anchor="end" fill="${COL_TOTAL}" font-size="9" font-family="monospace">${Math.round(val)}</text>`;
+  }
+  // Scala medie/sageata, dreapta
+  for (let i = 0; i <= 5; i++) {
+    const val = maxAvg * i / 5;
+    const y = scYAvg(val);
+    svg += `<text x="${PAD.left + plotW + 4}" y="${y + 3}" text-anchor="start" fill="${COL_AVG}" font-size="9" font-family="monospace">${val.toFixed(1)}</text>`;
+  }
+
+  // Grid X + etichete data
+  sorted.forEach((s, i) => {
+    const x = scX(i);
+    if (i === 0 || i === n - 1 || i % Math.ceil(n / 6) === 0) {
+      const d = new Date(s.date);
+      svg += `<line x1="${x}" y1="${PAD.top}" x2="${x}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="0.3"/>`;
+      svg += `<text x="${x}" y="${PAD.top + plotH + 13}" text-anchor="middle" fill="var(--text-dim)" font-size="9" font-family="monospace">${d.getDate()}.${d.getMonth() + 1}</text>`;
+    }
+  });
+
+  // Axe
+  svg += `<line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="1"/>`;
+  svg += `<line x1="${PAD.left}" y1="${PAD.top + plotH}" x2="${PAD.left + plotW}" y2="${PAD.top + plotH}" stroke="var(--border)" stroke-width="1"/>`;
+
+  // Linie scor total
+  if (n > 1) {
+    const ptsTotal = sorted.map((s, i) => `${scX(i).toFixed(1)},${scYTotal(totals[i]).toFixed(1)}`).join(' ');
+    svg += `<polyline points="${ptsTotal}" fill="none" stroke="${COL_TOTAL}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>`;
+  }
+  sorted.forEach((s, i) => {
+    svg += `<circle cx="${scX(i).toFixed(1)}" cy="${scYTotal(totals[i]).toFixed(1)}" r="3" fill="${COL_TOTAL}" stroke="var(--bg2)" stroke-width="1"/>`;
+  });
+
+  // Linie medie/sageata
+  if (n > 1) {
+    const ptsAvg = sorted.map((s, i) => `${scX(i).toFixed(1)},${scYAvg(avgs[i]).toFixed(1)}`).join(' ');
+    svg += `<polyline points="${ptsAvg}" fill="none" stroke="${COL_AVG}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>`;
+  }
+  sorted.forEach((s, i) => {
+    svg += `<circle cx="${scX(i).toFixed(1)}" cy="${scYAvg(avgs[i]).toFixed(1)}" r="3" fill="${COL_AVG}" stroke="var(--bg2)" stroke-width="1"/>`;
+  });
+
+  // Legenda
+  const legY = H + 18;
+  svg += `<rect x="8" y="${legY - 7}" width="12" height="4" rx="2" fill="${COL_TOTAL}"/>`;
+  svg += `<text x="23" y="${legY}" fill="var(--text-muted)" font-size="8" font-family="monospace">Scor total</text>`;
+  svg += `<rect x="${W/2 + 4}" y="${legY - 7}" width="12" height="4" rx="2" fill="${COL_AVG}"/>`;
+  svg += `<text x="${W/2 + 19}" y="${legY}" fill="var(--text-muted)" font-size="8" font-family="monospace">Medie/săgeată</text>`;
+
+  svg += '</svg>';
+  return svg;
+}
+
+function renderScoreAvgChart() {
+  const el = document.getElementById('score-avg-chart');
+  if (!el) return;
+
+  const trainings = sessions.filter(s => s.type === 'training' && s.ends && s.ends.length > 0);
+  if (!trainings.length) {
+    el.innerHTML = '<p class="evolution-empty">Niciun antrenament înregistrat încă.</p>';
+    return;
+  }
+  el.innerHTML = buildScoreAvgChart(trainings);
 }
 
 // ── Grafice concursuri per tip ─────────────────────────────
