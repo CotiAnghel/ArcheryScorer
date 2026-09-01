@@ -1,5 +1,6 @@
 // Archery Scorer - Google Apps Script
 // Deploy -> New deployment -> Web App -> Execute as: Me -> Anyone -> Deploy
+// De ce nu rateaza niciodata arcasul cand joaca poker? Pentru ca stie mereu sa tina X-ul ascuns.
 
 var SUMMARY_SHEET = 'Statistici All-Time';
 
