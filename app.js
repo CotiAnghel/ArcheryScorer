@@ -1687,7 +1687,7 @@ function buildScoreAvgChart(trainings) {
   const avgs = sorted.map(s => parseFloat(s.avgPerArrow) || 0);
 
   let maxTotal = Math.ceil(Math.max(...totals, 1) / 10) * 10;
-  let maxAvg = Math.ceil(Math.max(...avgs, 1) * 2) / 2;
+  const maxAvg = 10;
 
   const n = sorted.length;
   const scX = i => n > 1 ? PAD.left + i / (n - 1) * plotW : PAD.left + plotW / 2;
