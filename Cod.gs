@@ -84,13 +84,15 @@ function handleDelete(payload) {
   if (sheet) ss.deleteSheet(sheet);
   var summary = ss.getSheetByName(SUMMARY_SHEET);
   if (summary && payload.sessionDate) {
+    var tz = Session.getScriptTimeZone();
     var date = new Date(payload.sessionDate);
-    var dateStr = Utilities.formatDate(date, Session.getScriptTimeZone(), 'dd-MM-yyyy');
+    var dateStr = Utilities.formatDate(date, tz, 'dd-MM-yyyy HH:mm');
     var lastRow = summary.getLastRow();
     if (lastRow >= 4) {
       var data = summary.getRange(4, 1, lastRow - 3, 11).getValues();
       for (var i = data.length - 1; i >= 0; i--) {
-        var rowDateStr = data[i][0] ? data[i][0].toString().substring(0, 10) : '';
+        var cell = data[i][0];
+        var rowDateStr = cell instanceof Date ? Utilities.formatDate(cell, tz, 'dd-MM-yyyy HH:mm') : String(cell);
         if (rowDateStr === dateStr) {
           summary.deleteRow(i + 4);
           break;
@@ -98,6 +100,7 @@ function handleDelete(payload) {
       }
     }
     updateSummaryTotals(summary);
+    buildSummaryChart(summary);
   }
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', deleted: payload.sheetName }))
