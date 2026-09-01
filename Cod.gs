@@ -52,7 +52,8 @@ function handleInfo() {
     return {
       name: sheet.getName(),
       rows: sheet.getLastRow(),
-      cols: sheet.getLastColumn()
+      cols: sheet.getLastColumn(),
+      charts: sheet.getCharts().length
     };
   });
   return ContentService
@@ -231,56 +232,56 @@ function writeSessionToSheet(sheet, data) {
   writeCentrajSection(sheet, centrajRow, ends);
 }
 
-function writeCentrajSection(sheet, startRow, ends) {
-  var SCORE_RADIUS = {
-    'X': 0, '10': 0.5, '9': 1.5, '8': 2.5, '7': 3.5,
-    '6': 4.5, '5': 5.5, '4': 6.5, '3': 7.5, '2': 8.5, '1': 9.5, 'M': 10.5
+var SCORE_RADIUS = {
+  'X': 0, '10': 0.5, '9': 1.5, '8': 2.5, '7': 3.5,
+  '6': 4.5, '5': 5.5, '4': 6.5, '3': 7.5, '2': 8.5, '1': 9.5, 'M': 10.5
+};
+
+function arrowToXY(score, position) {
+  var r = SCORE_RADIUS[String(score)];
+  if (r === undefined) r = 5.0;
+  if (r === 0 || !position) return { x: 0, y: 0 };
+  var angleDeg = (parseInt(position) / 12.0) * 360.0;
+  var angleRad = angleDeg * Math.PI / 180;
+  return { x: r * Math.sin(angleRad), y: -r * Math.cos(angleRad) };
+}
+
+function groupCenter(arrows) {
+  var exact = arrows.filter(function(a) { return a.score !== 'M' && a.xMm !== undefined; });
+  var estimated = arrows.filter(function(a) { return a.score !== 'M' && a.xMm === undefined && a.position; });
+  var hasExact = exact.length > 0;
+  var coords, unit;
+  if (hasExact) {
+    coords = exact.map(function(a) { return { x: a.xMm, y: a.yMm }; });
+    unit = 'mm';
+  } else if (estimated.length > 0) {
+    coords = estimated.map(function(a) { return arrowToXY(a.score, a.position); });
+    unit = 'u';
+  } else { return null; }
+  var cx = coords.reduce(function(s, c) { return s + c.x; }, 0) / coords.length;
+  var cy = coords.reduce(function(s, c) { return s + c.y; }, 0) / coords.length;
+  var spread = Math.sqrt(coords.reduce(function(s, c) {
+    return s + (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy);
+  }, 0) / coords.length);
+  var dist = Math.sqrt(cx * cx + cy * cy);
+  var angleDeg = ((Math.atan2(cx, -cy) * 180 / Math.PI) + 360) % 360;
+  var hour = ((angleDeg / 360 * 12) % 12) || 12;
+  var dirLabels = {
+    12: 'sus', 1: 'sus-dreapta', 2: 'sus-dreapta', 3: 'dreapta',
+    4: 'jos-dreapta', 5: 'jos-dreapta', 6: 'jos', 7: 'jos-stanga',
+    8: 'jos-stanga', 9: 'stanga', 10: 'sus-stanga', 11: 'sus-stanga'
   };
+  var dir = dist < 0.5 ? 'centrat' : (dirLabels[Math.round(hour)] || '--') + ' (' + Math.round(hour) + 'h)';
+  return {
+    cx: Math.round(cx * 100) / 100,
+    cy: Math.round(cy * 100) / 100,
+    spread: Math.round(spread * 100) / 100,
+    dist: Math.round(dist * 100) / 100,
+    dir: dir, count: coords.length, unit: unit, hasExact: hasExact
+  };
+}
 
-  function arrowToXY(score, position) {
-    var r = SCORE_RADIUS[String(score)];
-    if (r === undefined) r = 5.0;
-    if (r === 0 || !position) return { x: 0, y: 0 };
-    var angleDeg = (parseInt(position) / 12.0) * 360.0;
-    var angleRad = angleDeg * Math.PI / 180;
-    return { x: r * Math.sin(angleRad), y: -r * Math.cos(angleRad) };
-  }
-
-  function groupCenter(arrows) {
-    var exact = arrows.filter(function(a) { return a.score !== 'M' && a.xMm !== undefined; });
-    var estimated = arrows.filter(function(a) { return a.score !== 'M' && a.xMm === undefined && a.position; });
-    var hasExact = exact.length > 0;
-    var coords, unit;
-    if (hasExact) {
-      coords = exact.map(function(a) { return { x: a.xMm, y: a.yMm }; });
-      unit = 'mm';
-    } else if (estimated.length > 0) {
-      coords = estimated.map(function(a) { return arrowToXY(a.score, a.position); });
-      unit = 'u';
-    } else { return null; }
-    var cx = coords.reduce(function(s, c) { return s + c.x; }, 0) / coords.length;
-    var cy = coords.reduce(function(s, c) { return s + c.y; }, 0) / coords.length;
-    var spread = Math.sqrt(coords.reduce(function(s, c) {
-      return s + (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy);
-    }, 0) / coords.length);
-    var dist = Math.sqrt(cx * cx + cy * cy);
-    var angleDeg = ((Math.atan2(cx, -cy) * 180 / Math.PI) + 360) % 360;
-    var hour = ((angleDeg / 360 * 12) % 12) || 12;
-    var dirLabels = {
-      12: 'sus', 1: 'sus-dreapta', 2: 'sus-dreapta', 3: 'dreapta',
-      4: 'jos-dreapta', 5: 'jos-dreapta', 6: 'jos', 7: 'jos-stanga',
-      8: 'jos-stanga', 9: 'stanga', 10: 'sus-stanga', 11: 'sus-stanga'
-    };
-    var dir = dist < 0.5 ? 'centrat' : (dirLabels[Math.round(hour)] || '--') + ' (' + Math.round(hour) + 'h)';
-    return {
-      cx: Math.round(cx * 100) / 100,
-      cy: Math.round(cy * 100) / 100,
-      spread: Math.round(spread * 100) / 100,
-      dist: Math.round(dist * 100) / 100,
-      dir: dir, count: coords.length, unit: unit, hasExact: hasExact
-    };
-  }
-
+function writeCentrajSection(sheet, startRow, ends) {
   var row = startRow;
 
   var hdrCentraj = sheet.getRange(row, 1, 1, 6);
@@ -329,8 +330,46 @@ function writeCentrajSection(sheet, startRow, ends) {
   sheet.setColumnWidth(6, 140);
 }
 
+var CENTRAJ_STAGING_COL = 20; // T
+
 function drawCentrajChart(sheet, startRow, ends, sessionCenter) {
-  // Grafic dezactivat temporar
+  var points = [];
+  ends.forEach(function(end, idx) {
+    var c = groupCenter(end.arrows || []);
+    if (!c) return;
+    var num = end.endNumber || idx + 1;
+    points.push(['S' + num, c.cx, c.cy, num, 6]);
+  });
+  if (!sessionCenter) return;
+  points.push(['Sesiune', sessionCenter.cx, sessionCenter.cy, 0, 16]);
+  if (points.length === 0) return;
+
+  // Tabel unic si contiguu: ID, X, Y, Grup, Marime (ordine ceruta de
+  // Google Charts pentru bubble chart: col 3 = grup/culoare, col 4 = marime).
+  var baseCol = CENTRAJ_STAGING_COL;
+  var hdr = ['ID', 'X', 'Y', 'Grup', 'Marime'];
+  sheet.getRange(startRow, baseCol, points.length + 1, hdr.length).clearContent();
+  sheet.getRange(startRow, baseCol, 1, hdr.length).setValues([hdr]);
+  sheet.getRange(startRow + 1, baseCol, points.length, hdr.length).setValues(points);
+  sheet.hideColumns(baseCol, hdr.length);
+
+  var dataRange = sheet.getRange(startRow, baseCol, points.length + 1, hdr.length);
+  var chart = sheet.newChart()
+    .setChartType(Charts.ChartType.BUBBLE)
+    .addRange(dataRange)
+    .setNumHeaders(1)
+    .setOption('title', 'Centraj grupaj — per serie & sesiune')
+    .setOption('hAxis', { title: 'X (stanga/dreapta)', minValue: -10, maxValue: 10, gridlines: { count: 9 } })
+    .setOption('vAxis', { title: 'Y (sus/jos)', minValue: -10, maxValue: 10, gridlines: { count: 9 } })
+    .setOption('legend', { position: 'right' })
+    .setOption('sizeAxis', { minValue: 6, maxValue: 16, minSize: 6, maxSize: 16 })
+    .setOption('bubble', { opacity: 0.85 })
+    .setOption('width', 600)
+    .setOption('height', 600)
+    .setPosition(startRow, baseCol - 12, 0, 0)
+    .build();
+
+  sheet.insertChart(chart);
 }
 
 function formatArrowTable(sheet, headerRow, firstDataRow, lastDataRow, maxArrows) {
