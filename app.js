@@ -1820,6 +1820,18 @@ function renderEvolutionChart() {
   el.innerHTML = buildSeriesChart(trainings, 'Antrenamente');
 }
 
+// ── Grupare antrenamente pe tip (distanta + tip tinta) ─────
+// Punctajul maxim posibil difera dupa distanta/tinta (nr. serii, sageti/serie,
+// inele) — de aceea le separam, ca sa nu se amestece scale diferite pe acelasi grafic.
+function trainingGroupKey(s) {
+  return `${s.config?.distance ?? '?'}_${s.config?.target ?? '?'}`;
+}
+function trainingGroupLabel(s) {
+  const dist = s.config?.distance ? `${s.config.distance}m` : 'distanță necunoscută';
+  const spec = TARGET_SPECS[s.config?.target];
+  return `${dist} · ${spec ? spec.name : (s.config?.target || 'țintă necunoscută')}`;
+}
+
 // ── Grafic scor total & medie/sageata per antrenament ──────
 function buildScoreAvgChart(trainings) {
   if (!trainings.length) return '';
@@ -1882,7 +1894,8 @@ function buildScoreAvgChart(trainings) {
     svg += `<polyline points="${ptsTotal}" fill="none" stroke="${COL_TOTAL}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>`;
   }
   sorted.forEach((s, i) => {
-    svg += `<circle cx="${scX(i).toFixed(1)}" cy="${scYTotal(totals[i]).toFixed(1)}" r="3" fill="${COL_TOTAL}" stroke="var(--bg2)" stroke-width="1"/>`;
+    const tip = `${new Date(s.date).toLocaleDateString('ro-RO')} · Arc: ${s.bow?.name || '—'} · Total: ${totals[i]}`;
+    svg += `<circle cx="${scX(i).toFixed(1)}" cy="${scYTotal(totals[i]).toFixed(1)}" r="3" fill="${COL_TOTAL}" stroke="var(--bg2)" stroke-width="1"><title>${tip}</title></circle>`;
   });
 
   // Linie medie/sageata
@@ -1891,7 +1904,8 @@ function buildScoreAvgChart(trainings) {
     svg += `<polyline points="${ptsAvg}" fill="none" stroke="${COL_AVG}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>`;
   }
   sorted.forEach((s, i) => {
-    svg += `<circle cx="${scX(i).toFixed(1)}" cy="${scYAvg(avgs[i]).toFixed(1)}" r="3" fill="${COL_AVG}" stroke="var(--bg2)" stroke-width="1"/>`;
+    const tip = `${new Date(s.date).toLocaleDateString('ro-RO')} · Arc: ${s.bow?.name || '—'} · Medie: ${avgs[i]}`;
+    svg += `<circle cx="${scX(i).toFixed(1)}" cy="${scYAvg(avgs[i]).toFixed(1)}" r="3" fill="${COL_AVG}" stroke="var(--bg2)" stroke-width="1"><title>${tip}</title></circle>`;
   });
 
   // Legenda
@@ -1914,7 +1928,26 @@ function renderScoreAvgChart() {
     el.innerHTML = '<p class="evolution-empty">Niciun antrenament înregistrat încă.</p>';
     return;
   }
-  el.innerHTML = buildScoreAvgChart(trainings);
+
+  // Grupeaza pe tip de antrenament (distanta + tinta) — punctajul maxim
+  // posibil difera intre tipuri, deci nu le amestecam pe acelasi grafic.
+  const byType = {};
+  trainings.forEach(s => {
+    const key = trainingGroupKey(s);
+    if (!byType[key]) byType[key] = { label: trainingGroupLabel(s), sessions: [] };
+    byType[key].sessions.push(s);
+  });
+
+  let html = '';
+  Object.values(byType).forEach(group => {
+    html += `<h3 class="subsection-title" style="margin-top:1rem">${group.label}</h3>`;
+    const bows = [...new Set(group.sessions.map(s => s.bow?.name).filter(Boolean))];
+    if (bows.length > 1) {
+      html += `<p class="evolution-empty" style="text-align:left;font-style:normal;padding:0 0 0.4rem">🏹 Arcuri folosite: ${bows.join(', ')}</p>`;
+    }
+    html += buildScoreAvgChart(group.sessions);
+  });
+  el.innerHTML = html;
 }
 
 // ── Grafice concursuri per tip ─────────────────────────────

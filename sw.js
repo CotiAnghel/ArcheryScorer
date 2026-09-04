@@ -1,4 +1,4 @@
-const CACHE = 'archery-v5';
+const CACHE = 'archery-v6';
 const ASSETS = ['./index.html', './style.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', e => {

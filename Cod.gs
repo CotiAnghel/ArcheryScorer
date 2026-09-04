@@ -441,84 +441,110 @@ function updateSummarySheet(ss, newSession) {
   var dist = (newSession.config && newSession.config.distance) ? newSession.config.distance + 'm' : '';
   var type = newSession.type === 'training' ? 'Antrenament' : 'Concurs';
   var comp = (newSession.competition && newSession.competition.name) ? newSession.competition.name : '';
-  var newRow = [date, type, bow, dist, ends.length, cnt, total, xs, avg, best, comp];
+  var tipTinta = (newSession.config && newSession.config.target) ? newSession.config.target : '';
+  var newRow = [date, type, bow, dist, ends.length, cnt, total, xs, avg, best, comp, tipTinta];
   var lastRow = sheet.getLastRow();
   sheet.getRange(lastRow + 1, 1, 1, newRow.length).setValues([newRow]);
   updateSummaryTotals(sheet);
-  sheet.autoResizeColumns(1, 11);
+  sheet.autoResizeColumns(1, 12);
   buildSummaryChart(sheet);
 }
 
-// ── Grafic Scor total & Medie/sageata (ca in aplicatie) ────
+// ── Grafic Scor total & Medie/sageata, cate unul per tip de antrenament
+// (distanta + tip tinta) — punctajul maxim posibil difera intre tipuri,
+// deci nu le amestecam pe acelasi grafic (la fel ca in aplicatie).
 var CHART_TITLE = 'Scor total & Medie/sageata';
 var CHART_STAGING_COL = 14; // N
+var CHART_STAGING_GROUP_WIDTH = 4; // 3 coloane de date + 1 gol intre grupuri
+var CHART_MAX_GROUPS = 15; // cat de larg curatam zona de staging
 
 function buildSummaryChart(sheet) {
   var lastRow = sheet.getLastRow();
+
+  // Curata zona de staging si toate graficele vechi generate de script
+  sheet.getRange(3, CHART_STAGING_COL, Math.max(sheet.getMaxRows() - 2, 1),
+                  CHART_STAGING_GROUP_WIDTH * CHART_MAX_GROUPS).clearContent();
+  sheet.getCharts().forEach(function(c) {
+    var t = c.getOptions().get('title') || '';
+    if (t.indexOf(CHART_TITLE) === 0) sheet.removeChart(c);
+  });
+
   if (lastRow < 4) return;
 
-  var data = sheet.getRange(4, 1, lastRow - 3, 11).getValues();
-  var rows = [];
+  var data = sheet.getRange(4, 1, lastRow - 3, 12).getValues();
+  // Grupeaza pe distanta + tip tinta (col D=3, col L=11)
+  var groups = {}; // key -> { label, bows:Set, rows:[[data,total,medie]] }
   data.forEach(function(r) {
-    if (r[1] === 'Antrenament' && r[0]) {
-      rows.push([r[0], r[6], r[8]]); // Data, Total, Medie/sg
+    if (r[1] !== 'Antrenament' || !r[0]) return;
+    var dist = r[3] || '';
+    var tinta = r[11] || '';
+    var key = dist + '|' + tinta;
+    if (!groups[key]) {
+      var tintaLabel = tinta ? String(tinta).replace(/_/g, ' ') : 'tip țintă necunoscut';
+      groups[key] = { label: dist + ' · ' + tintaLabel, bows: {}, rows: [] };
     }
+    if (r[2]) groups[key].bows[r[2]] = true;
+    groups[key].rows.push([r[0], r[6], r[8]]); // Data, Total, Medie/sg
   });
 
-  // Curata zona de staging si graficele vechi generate de script
-  sheet.getRange(3, CHART_STAGING_COL, Math.max(sheet.getMaxRows() - 2, 1), 3).clearContent();
-  sheet.getCharts().forEach(function(c) {
-    if (c.getOptions().get('title') === CHART_TITLE) sheet.removeChart(c);
+  var groupKeys = Object.keys(groups);
+  groupKeys.forEach(function(key, gi) {
+    var g = groups[key];
+    g.rows.sort(function(a, b) { return new Date(a[0]) - new Date(b[0]); });
+    var col = CHART_STAGING_COL + gi * CHART_STAGING_GROUP_WIDTH;
+
+    sheet.getRange(3, col, 1, 3).setValues([['Data', 'Scor total', 'Medie/sageata']]);
+    sheet.getRange(4, col, g.rows.length, 3).setValues(g.rows);
+
+    var bowNames = Object.keys(g.bows);
+    var title = CHART_TITLE + ' — ' + g.label +
+      (bowNames.length > 1 ? ' (Arcuri: ' + bowNames.join(', ') + ')'
+        : bowNames.length === 1 ? ' (Arc: ' + bowNames[0] + ')' : '');
+
+    var dataRange = sheet.getRange(3, col, g.rows.length + 1, 3);
+    var chart = sheet.newChart()
+      .asComboChart()
+      .addRange(dataRange)
+      .setNumHeaders(1)
+      .setOption('title', title)
+      .setOption('series', {
+        0: { type: 'line', targetAxisIndex: 0, color: '#e8c44a' },
+        1: { type: 'line', targetAxisIndex: 1, color: '#3b82f6' }
+      })
+      .setOption('vAxes', {
+        0: { title: 'Scor total' },
+        1: { title: 'Medie/sageata', minValue: 0, maxValue: 10 }
+      })
+      .setOption('hAxis', { title: 'Data' })
+      .setOption('width', 700)
+      .setOption('height', 350)
+      .setPosition(15 + gi * 20, 1, 0, 0)
+      .build();
+    sheet.insertChart(chart);
   });
 
-  if (rows.length === 0) return;
-  rows.sort(function(a, b) { return new Date(a[0]) - new Date(b[0]); });
-
-  sheet.getRange(3, CHART_STAGING_COL, 1, 3).setValues([['Data', 'Scor total', 'Medie/sageata']]);
-  sheet.getRange(4, CHART_STAGING_COL, rows.length, 3).setValues(rows);
-  sheet.hideColumns(CHART_STAGING_COL, 3);
-
-  var dataRange = sheet.getRange(3, CHART_STAGING_COL, rows.length + 1, 3);
-  var chart = sheet.newChart()
-    .asComboChart()
-    .addRange(dataRange)
-    .setNumHeaders(1)
-    .setOption('title', CHART_TITLE)
-    .setOption('series', {
-      0: { type: 'line', targetAxisIndex: 0, color: '#e8c44a' },
-      1: { type: 'line', targetAxisIndex: 1, color: '#3b82f6' }
-    })
-    .setOption('vAxes', {
-      0: { title: 'Scor total' },
-      1: { title: 'Medie/sageata', minValue: 0, maxValue: 10 }
-    })
-    .setOption('hAxis', { title: 'Data' })
-    .setOption('width', 700)
-    .setOption('height', 350)
-    .setPosition(15, 1, 0, 0)
-    .build();
-  sheet.insertChart(chart);
+  sheet.hideColumns(CHART_STAGING_COL, CHART_STAGING_GROUP_WIDTH * Math.max(groupKeys.length, 1));
 }
 
 function writeSummaryHeaders(sheet) {
-  sheet.getRange(1, 1, 1, 11).merge()
+  sheet.getRange(1, 1, 1, 12).merge()
        .setValue('ARCHERY SCORER - STATISTICI ALL-TIME')
        .setBackground('#1a1a2e').setFontColor('#e8c44a')
        .setFontWeight('bold').setHorizontalAlignment('center');
   sheet.setRowHeight(1, 32);
-  var hdr = ['Data', 'Tip', 'Arc', 'Distanta', 'Serii', 'Sageti', 'Total', 'X-uri', 'Medie/sg', 'Best End', 'Competitie'];
+  var hdr = ['Data', 'Tip', 'Arc', 'Distanta', 'Serii', 'Sageti', 'Total', 'X-uri', 'Medie/sg', 'Best End', 'Competitie', 'Tip tinta'];
   sheet.getRange(2, 1, 1, hdr.length).setValues([hdr])
        .setBackground('#2e3452').setFontColor('#e8c44a').setFontWeight('bold');
-  sheet.getRange(3, 1, 1, 11).setBackground('#0f1117').setFontColor('#7a84a8');
+  sheet.getRange(3, 1, 1, 12).setBackground('#0f1117').setFontColor('#7a84a8');
 }
 
 function updateSummaryTotals(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 4) {
-    sheet.getRange(3, 1, 1, 11).setValues([['Nu sunt sesiuni inregistrate', '', '', '', '', '', '', '', '', '', '']]);
+    sheet.getRange(3, 1, 1, 12).setValues([['Nu sunt sesiuni inregistrate', '', '', '', '', '', '', '', '', '', '', '']]);
     return;
   }
-  var data = sheet.getRange(4, 1, lastRow - 3, 11).getValues();
+  var data = sheet.getRange(4, 1, lastRow - 3, 12).getValues();
   var totalSess = data.length;
   var totalEnds = 0, totalArr = 0, totalPts = 0, totalXs = 0, bestEnd = 0;
   data.forEach(function(r) {
