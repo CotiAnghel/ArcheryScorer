@@ -98,11 +98,10 @@
           </div>
         </div>
 
-        <!-- Sfat/observatie dupa serie -->
+        <!-- Sfat/observatie/felicitari dupa serie -->
         <div id="end-tip-card" class="end-tip-card hidden">
           <button class="end-tip-close" onclick="dismissEndTip()" aria-label="Închide">✕</button>
-          <span class="end-tip-icon" id="end-tip-icon"></span>
-          <span class="end-tip-text" id="end-tip-text"></span>
+          <div class="end-tip-body" id="end-tip-body"></div>
         </div>
 
         <!-- Arrow input grid -->
@@ -194,6 +193,12 @@
             💾 Finalizează și salvează sesiunea
           </button>
         </div>
+      </div>
+
+      <!-- Felicitari la finalul sesiunii (in afara #active-session, ca sa ramana vizibil dupa ce sesiunea se ascunde) -->
+      <div id="session-tip-card" class="end-tip-card hidden">
+        <button class="end-tip-close" onclick="dismissSessionTip()" aria-label="Închide">✕</button>
+        <div class="end-tip-body" id="session-tip-body"></div>
       </div>
     </div>
 

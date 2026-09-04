@@ -551,10 +551,7 @@ html, body {
   top: 18%;
   transform: translate(-50%, 0);
   z-index: 1000;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  width: min(90vw, 360px);
+  width: min(90vw, 380px);
   background: var(--bg3);
   border: 1px solid var(--border);
   border-left: 4px solid var(--accent);
@@ -569,9 +566,17 @@ html, body {
 .end-tip-card.hidden { display: none; }
 .end-tip-card.tone-good   { border-left-color: var(--accent3); }
 .end-tip-card.tone-warn   { border-left-color: var(--accent2); }
-.end-tip-icon { font-size: 1.3rem; flex-shrink: 0; line-height: 1.45; }
-.end-tip-text { flex: 1; }
-.end-tip-text strong { color: var(--text); }
+.end-tip-body { display: flex; flex-direction: column; gap: 0.5rem; }
+.end-tip-line { display: flex; align-items: flex-start; gap: 0.5rem; }
+.end-tip-line .end-tip-icon { font-size: 1.2rem; flex-shrink: 0; line-height: 1.4; }
+.end-tip-line.achievement { color: var(--accent3); font-weight: 600; }
+.end-tip-line.achievement .end-tip-icon { font-size: 1.35rem; }
+.end-tip-line.subtext {
+  color: var(--text-muted);
+  font-weight: 400;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+}
 .end-tip-close {
   position: absolute;
   top: 0.5rem;

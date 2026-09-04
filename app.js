@@ -408,6 +408,7 @@ function initSessionUI() {
   currentEndIndex = 0;
   endArrows = [];
   dismissEndTip();
+  dismissSessionTip();
   document.getElementById('session-chooser')?.classList?.add('hidden');
   document.querySelector('.session-chooser').classList.add('hidden');
   document.getElementById('evolution-section').classList.add('hidden');
@@ -668,21 +669,25 @@ function confirmEnd() {
 
   const endTotal = endArrows.reduce((s, a) => s + scoreNumeric(a.score), 0);
   const confirmedArrows = [...endArrows];
-  currentSession.ends.push({
+  const confirmedEnd = {
     endNumber: currentEndIndex + 1,
     arrows: confirmedArrows,
     total: endTotal,
     distance: currentSession.config.flatEnds
       ? currentSession.config.flatEnds[currentEndIndex]?.distance
       : currentSession.config.distance
-  });
+  };
+  currentSession.ends.push(confirmedEnd);
 
   endArrows = [];
   editingArrowIndex = -1;
   currentEndIndex++;
   // Refresh ținta grafică pentru seria nouă
   if (graphicInputMode) setTimeout(() => renderGraphicTarget(), 0);
-  showEndTip(confirmedArrows);
+  const endAchievements = currentSession.type === 'training'
+    ? computeEndAchievements(confirmedEnd, trainingGroupKey(currentSession))
+    : [];
+  showEndTip(confirmedArrows, endAchievements);
 
   // Pentru concurs cu număr fix de serii
   if (!freeForm) {
@@ -719,6 +724,10 @@ function finishSession() {
   currentSession.avgPerArrow = allArrows.length > 0
     ? (currentSession.totalScore / allArrows.length).toFixed(2) : 0;
 
+  const sessionAchievements = currentSession.type === 'training'
+    ? computeSessionAchievements(currentSession, trainingGroupKey(currentSession))
+    : [];
+
   sessions.unshift(currentSession);
   save();
   assignIndexes();
@@ -727,7 +736,10 @@ function finishSession() {
   const saved = currentSession;
   cancelSession(false);
 
-  toast(`✓ Sesiune salvată! Total: ${saved.totalScore} pt`, 'success');
+  const tens = countScore(allArrows, '10');
+  const nines = countScore(allArrows, '9');
+  toast(`✓ Sesiune salvată! Total: ${saved.totalScore} pt · ${saved.totalXs} X-uri · ${tens} de 10 · ${nines} de 9`, 'success');
+  showSessionTip(sessionAchievements);
   renderEvolutionChart();
   renderCompetitionCharts();
   renderScoreAvgChart();
@@ -745,6 +757,7 @@ function cancelSession(withConfirm = true) {
   endArrows = [];
   editingArrowIndex = -1;
   dismissEndTip();
+  dismissSessionTip();
   document.querySelector('.session-chooser').classList.remove('hidden');
   document.getElementById('evolution-section').classList.remove('hidden');
   document.getElementById('active-session').classList.add('hidden');
@@ -1139,22 +1152,153 @@ function computeEndTip(arrows) {
 }
 
 let endTipTimer = null;
+let sessionTipTimer = null;
 const END_TIP_AUTOHIDE_MS = 4500;
+const SESSION_TIP_AUTOHIDE_MS = 6000;
 
-function showEndTip(arrows) {
+function countScore(arrows, score) {
+  return (arrows || []).filter(a => a.score === score).length;
+}
+
+// ── Recorduri PE SERIE (comparate cu toate seriile din toate
+// antrenamentele de acelasi tip: distanta + tinta) ──────────
+function computeEndAchievements(confirmedEnd, groupKey) {
+  const priorEnds = [];
+  sessions.forEach(s => {
+    if (s.type !== 'training' || trainingGroupKey(s) !== groupKey) return;
+    (s.ends || []).forEach(e => priorEnds.push(e));
+  });
+  if (currentSession) {
+    currentSession.ends.forEach(e => { if (e !== confirmedEnd) priorEnds.push(e); });
+  }
+
+  const arrows = confirmedEnd.arrows || [];
+  const n = arrows.length;
+  const xCount = countScore(arrows, 'X');
+  const tenCount = countScore(arrows, '10');
+  const yellowCount = arrows.filter(a => a.score === 'X' || a.score === '10' || a.score === '9').length;
+  const lines = [];
+
+  // Nivel de "puritate" al seriei — mutual exclusiv, doar cel mai bun aplicabil
+  if (n > 0 && xCount === n) {
+    lines.push({ priority: 100, icon: '🌟', text: `Serie perfectă — doar X-uri! ${n}/${n} X!`, effect: 'big' });
+  } else if (n > 0 && xCount + tenCount === n) {
+    lines.push({ priority: 80, icon: '✨', text: 'Toate săgețile X sau 10 — aproape perfect!', effect: 'medium' });
+  } else if (n > 0 && yellowCount === n) {
+    const hadYellowBefore = priorEnds.some(e => {
+      const ea = e.arrows || [];
+      return ea.length > 0 && ea.every(a => a.score === 'X' || a.score === '10' || a.score === '9');
+    });
+    lines.push(hadYellowBefore
+      ? { priority: 40, icon: '🟡', text: 'Din nou toată seria în galben — consecvență de nivel înalt!', effect: 'light' }
+      : { priority: 50, icon: '🟡', text: 'Prima dată când nimerești toată seria în galben (9-10-X)!', effect: 'light' });
+  }
+
+  if (priorEnds.length > 0) {
+    const prevBestScore = priorEnds.reduce((m, e) => Math.max(m, e.total || 0), 0);
+    if (confirmedEnd.total > prevBestScore) {
+      lines.push({ priority: 90, icon: '🎉', text: `Scor nou maxim pe serie! ${confirmedEnd.total} pt (+${confirmedEnd.total - prevBestScore} față de recordul de ${prevBestScore} pt)`, effect: 'big' });
+    } else if (confirmedEnd.total === prevBestScore) {
+      lines.push({ priority: 70, icon: '🏅', text: `Ai egalat recordul de scor pe serie: ${confirmedEnd.total} pt!`, effect: 'medium' });
+    }
+
+    const prevBestX = priorEnds.reduce((m, e) => Math.max(m, countScore(e.arrows, 'X')), 0);
+    if (xCount > 0 && xCount > prevBestX) {
+      lines.push({ priority: 60, icon: '🎯', text: `Record X-uri într-o serie: ${xCount}!`, effect: 'medium' });
+    }
+    const prevBestTen = priorEnds.reduce((m, e) => Math.max(m, countScore(e.arrows, '10')), 0);
+    if (tenCount > 0 && tenCount > prevBestTen) {
+      lines.push({ priority: 60, icon: '🔟', text: `Record 10-uri într-o serie: ${tenCount}!`, effect: 'medium' });
+    }
+  }
+
+  lines.sort((a, b) => b.priority - a.priority);
+  return lines;
+}
+
+// ── Recorduri LA NIVEL DE SESIUNE (comparate cu celelalte
+// sesiuni de acelasi tip de antrenament) ────────────────────
+function computeSessionAchievements(session, groupKey) {
+  const priorSessions = sessions.filter(s => s.type === 'training' && trainingGroupKey(s) === groupKey);
+  const arrows = session.ends.flatMap(e => e.arrows || []);
+  const tenCount = countScore(arrows, '10');
+  const xCount = session.totalXs || countScore(arrows, 'X');
+  const totalScore = session.totalScore || 0;
+  const avg = parseFloat(session.avgPerArrow) || 0;
+  const lines = [];
+
+  if (priorSessions.length === 0) {
+    lines.push({ priority: 20, icon: '👋', text: 'Primul tău antrenament de acest tip, înregistrat! De acum urmărim progresul aici.', effect: 'light' });
+    return lines;
+  }
+
+  const prevMaxScore = Math.max(...priorSessions.map(s => s.totalScore || 0));
+  const prevMaxX = Math.max(...priorSessions.map(s => s.totalXs || 0));
+  const prevMaxTen = Math.max(...priorSessions.map(s => countScore(s.ends.flatMap(e => e.arrows || []), '10')));
+  const prevMaxAvg = Math.max(...priorSessions.map(s => parseFloat(s.avgPerArrow) || 0));
+
+  if (totalScore > prevMaxScore) {
+    lines.push({ priority: 100, icon: '🎉', text: `Scor nou maxim! ${totalScore} pt (+${totalScore - prevMaxScore} față de recordul de ${prevMaxScore} pt la acest tip de antrenament)`, effect: 'big' });
+  } else if (totalScore === prevMaxScore) {
+    lines.push({ priority: 90, icon: '🏅', text: `Ai egalat recordul de scor la acest tip de antrenament: ${totalScore} pt!`, effect: 'medium' });
+  }
+  if (xCount > 0 && xCount > prevMaxX) {
+    lines.push({ priority: 70, icon: '🎯', text: `Record X-uri într-un antrenament de acest tip: ${xCount}!`, effect: 'medium' });
+  }
+  if (tenCount > 0 && tenCount > prevMaxTen) {
+    lines.push({ priority: 70, icon: '🔟', text: `Record 10-uri într-un antrenament de acest tip: ${tenCount}!`, effect: 'medium' });
+  }
+  if (avg > 0 && avg > prevMaxAvg) {
+    lines.push({ priority: 60, icon: '📈', text: `Cea mai bună medie/săgeată de până acum la acest tip: ${avg}!`, effect: 'medium' });
+  }
+
+  if (lines.length === 0) {
+    const lastOfType = priorSessions.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    if (lastOfType) {
+      const diff = totalScore - (lastOfType.totalScore || 0);
+      if (diff > 0) {
+        lines.push({ priority: 30, icon: '✨', text: `+${diff} pt față de ultimul antrenament de acest tip.`, effect: 'light' });
+      }
+    }
+  }
+
+  lines.sort((a, b) => b.priority - a.priority);
+  return lines;
+}
+
+function effectTierFor(lines) {
+  if (lines.some(l => l.effect === 'big')) return 'big';
+  if (lines.some(l => l.effect === 'medium')) return 'medium';
+  if (lines.length > 0) return 'light';
+  return null;
+}
+
+function runCelebrationEffect(tier) {
+  if (tier === 'big') { launchConfetti(60); launchFireworks(); }
+  else if (tier === 'medium') { launchConfetti(50); }
+  else if (tier === 'light') { launchConfetti(22); }
+}
+
+function showEndTip(arrows, achievements) {
   const tip = computeEndTip(arrows);
+  const ach = achievements || [];
   const card = document.getElementById('end-tip-card');
-  if (!tip || !card) { dismissEndTip(); return; }
+  const body = document.getElementById('end-tip-body');
+  if (!card || !body || (!tip && ach.length === 0)) { dismissEndTip(); return; }
 
   clearTimeout(endTipTimer);
-  document.getElementById('end-tip-icon').textContent = tip.icon;
-  document.getElementById('end-tip-text').textContent = tip.text;
-  card.className = 'end-tip-card' + (tip.tone ? ` tone-${tip.tone}` : '');
 
-  if (tip.tone === 'good') {
-    launchConfetti();
-    launchFireworks();
+  let html = ach.map(a => `<div class="end-tip-line achievement"><span class="end-tip-icon">${a.icon}</span><span>${a.text}</span></div>`).join('');
+  if (tip) {
+    html += `<div class="end-tip-line${ach.length ? ' subtext' : ''}"><span class="end-tip-icon">${tip.icon}</span><span>${tip.text}</span></div>`;
   }
+  body.innerHTML = html;
+
+  const tone = ach.length > 0 ? 'good' : tip.tone;
+  card.className = 'end-tip-card' + (tone ? ` tone-${tone}` : '');
+
+  const tier = effectTierFor(ach);
+  if (tier) runCelebrationEffect(tier);
 
   endTipTimer = setTimeout(dismissEndTip, END_TIP_AUTOHIDE_MS);
 }
@@ -1167,13 +1311,39 @@ function dismissEndTip() {
   setTimeout(() => card.classList.add('hidden'), 280);
 }
 
+function showSessionTip(achievements) {
+  const card = document.getElementById('session-tip-card');
+  const body = document.getElementById('session-tip-body');
+  if (!card || !body || !achievements || achievements.length === 0) return;
+
+  clearTimeout(sessionTipTimer);
+  card.classList.remove('hidden', 'fade-out');
+  body.innerHTML = achievements.map(a =>
+    `<div class="end-tip-line achievement"><span class="end-tip-icon">${a.icon}</span><span>${a.text}</span></div>`
+  ).join('');
+  card.className = 'end-tip-card tone-good';
+
+  const tier = effectTierFor(achievements);
+  if (tier) runCelebrationEffect(tier);
+
+  sessionTipTimer = setTimeout(dismissSessionTip, SESSION_TIP_AUTOHIDE_MS);
+}
+
+function dismissSessionTip() {
+  clearTimeout(sessionTipTimer);
+  const card = document.getElementById('session-tip-card');
+  if (!card || card.classList.contains('hidden')) return;
+  card.classList.add('fade-out');
+  setTimeout(() => card.classList.add('hidden'), 280);
+}
+
 // ── Efecte de sarbatoare (realizari bune) ───────────────────
-function launchConfetti() {
+function launchConfetti(count) {
   const overlay = document.createElement('div');
   overlay.className = 'fx-overlay';
   document.body.appendChild(overlay);
   const colors = ['#e8c44a', '#3b82f6', '#27ae60', '#c0392b', '#ffffff'];
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < (count || 60); i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
     piece.style.left = `${Math.random() * 100}vw`;
