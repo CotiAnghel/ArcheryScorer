@@ -407,6 +407,7 @@ function beginCompetition(comp) {
 function initSessionUI() {
   currentEndIndex = 0;
   endArrows = [];
+  dismissEndTip();
   document.getElementById('session-chooser')?.classList?.add('hidden');
   document.querySelector('.session-chooser').classList.add('hidden');
   document.getElementById('evolution-section').classList.add('hidden');
@@ -666,9 +667,10 @@ function confirmEnd() {
   }
 
   const endTotal = endArrows.reduce((s, a) => s + scoreNumeric(a.score), 0);
+  const confirmedArrows = [...endArrows];
   currentSession.ends.push({
     endNumber: currentEndIndex + 1,
-    arrows: [...endArrows],
+    arrows: confirmedArrows,
     total: endTotal,
     distance: currentSession.config.flatEnds
       ? currentSession.config.flatEnds[currentEndIndex]?.distance
@@ -680,6 +682,7 @@ function confirmEnd() {
   currentEndIndex++;
   // Refresh ținta grafică pentru seria nouă
   if (graphicInputMode) setTimeout(() => renderGraphicTarget(), 0);
+  showEndTip(confirmedArrows);
 
   // Pentru concurs cu număr fix de serii
   if (!freeForm) {
@@ -741,6 +744,7 @@ function cancelSession(withConfirm = true) {
   currentEndIndex = 0;
   endArrows = [];
   editingArrowIndex = -1;
+  dismissEndTip();
   document.querySelector('.session-chooser').classList.remove('hidden');
   document.getElementById('evolution-section').classList.remove('hidden');
   document.getElementById('active-session').classList.add('hidden');
@@ -1001,6 +1005,150 @@ function sessionCentraj(session) {
     center: groupCenter(end.arrows)
   })).filter(e => e.center);
   return { sessionCenter, endCenters };
+}
+
+// ── Sfaturi/observatii dupa fiecare serie ───────────────────
+// Directie (ora) -> eticheta + verbul de ajustare a sight-ului
+// (regula: sight-ul se muta in directia grupajului, nu opus)
+const END_TIP_DIRECTIONS = {
+  12: { label: 'sus',         sight: 'ridici puțin sight-ul' },
+  1:  { label: 'sus-dreapta', sight: 'ridici puțin sight-ul și îl muți spre dreapta' },
+  2:  { label: 'sus-dreapta', sight: 'ridici puțin sight-ul și îl muți spre dreapta' },
+  3:  { label: 'dreapta',     sight: 'muți sight-ul spre dreapta' },
+  4:  { label: 'jos-dreapta', sight: 'cobori puțin sight-ul și îl muți spre dreapta' },
+  5:  { label: 'jos-dreapta', sight: 'cobori puțin sight-ul și îl muți spre dreapta' },
+  6:  { label: 'jos',         sight: 'cobori puțin sight-ul' },
+  7:  { label: 'jos-stânga',  sight: 'cobori puțin sight-ul și îl muți spre stânga' },
+  8:  { label: 'jos-stânga',  sight: 'cobori puțin sight-ul și îl muți spre stânga' },
+  9:  { label: 'stânga',      sight: 'muți sight-ul spre stânga' },
+  10: { label: 'sus-stânga',  sight: 'ridici puțin sight-ul și îl muți spre stânga' },
+  11: { label: 'sus-stânga',  sight: 'ridici puțin sight-ul și îl muți spre stânga' },
+};
+
+// Cauze probabile de formă, per directie de deplasare a grupajului
+// (folosite cand grupajul NU e suficient de strans pentru un sfat de sight)
+const END_TIP_FORM_CAUSES = {
+  sus:  ['presiune prea mare pe partea de jos a grip-ului', 'curbură mai mare a degetului index pe coardă', 'draw length puțin mai lung ca de obicei'],
+  jos:  ['colaps sau "creep" înainte chiar la eliberare', 'presiune excesivă în punctul de pivot al grip-ului', 'brațul arcului coboară prea repede după eliberare'],
+  'stânga': ['pluck — mâna de eliberare se depărtează de față', 'tensiune/torque în mâna arcului (grip)', 'cant (înclinare) a arcului spre stânga'],
+  dreapta: ['eliberare forțată, cu energie suplimentară în coardă', 'torque pe grip în direcția opusă', 'cant (înclinare) a arcului spre dreapta'],
+};
+
+function endTipFormCause(dirLabel) {
+  // Pentru directii diagonale combinam cauzele celor doua axe
+  const parts = dirLabel.split('-');
+  const pool = parts.flatMap(p => END_TIP_FORM_CAUSES[p] || []);
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : 'o mică inconsecvență de formă';
+}
+
+const END_TIP_POOLS = {
+  tightCentered: [
+    { icon: '🎯', tone: 'good', text: 'Grupaj excelent! Foarte consecvent — ține exact aceeași formă.' },
+    { icon: '🎯', tone: 'good', text: 'Săgeți strânse, aproape de centru. Așa se trage!' },
+    { icon: '🔥', tone: 'good', text: 'Consecvență de nivel înalt la seria asta — grupaj compact și centrat.' },
+  ],
+  tightOffCenter: (dirLabel, sight) => [
+    { icon: '📍', text: `Grupaj strâns, dar constant ${dirLabel} de centru — repetabil, deci ține de formă, nu de noroc. Ia în calcul să ${sight}.` },
+  ],
+  offCenterLoose: (dirLabel) => [
+    { icon: dirLabel === 'sus' ? '⬆️' : dirLabel === 'jos' ? '⬇️' : dirLabel === 'stânga' ? '⬅️' : dirLabel === 'dreapta' ? '➡️' : '↗️',
+      text: `Grupaj deplasat ${dirLabel}. Posibil ${endTipFormCause(dirLabel)}.` },
+  ],
+  horizontalSpread: [
+    { icon: '↔️', text: 'Împrăștiere pe orizontală — de obicei ține de "poza corzii": alinierea corzii față de riser variază de la o săgeată la alta. Încearcă să fixezi exact același reper vizual la ancoră.' },
+  ],
+  verticalSpread: [
+    { icon: '↕️', text: 'Împrăștiere pe verticală — verifică presiunea degetelor pe coardă (indexul și mijlociul ar trebui să preia majoritatea efortului) sau punctul de ancoră, care poate varia ușor de la o săgeată la alta.' },
+  ],
+  looseGeneral: [
+    { icon: '📊', text: 'Dispersie mai mare la seria asta. Nimic sistematic — probabil ține de concentrare, nu de formă. Respiră, resetează-te între săgeți.' },
+  ],
+  mixedFlyerSingle: [
+    { icon: '⚠️', tone: 'warn', text: 'Restul seriei arată bine, dar o săgeată a deviat mult. Verifică dacă ai "peekuit" (ai urmărit săgeata înainte de follow-through complet) sau dacă ancora a fost fermă pe acea săgeată.' },
+    { icon: '⚠️', tone: 'warn', text: 'Grupaj bun per total, cu o excepție — se poate întâmpla din grabă sau oboseală. Nu te lăsa, calitatea de bază e acolo!' },
+  ],
+  mixedFlyerMultiple: [
+    { icon: '⚠️', tone: 'warn', text: 'Restul seriei arată bine, dar câteva săgeți au deviat mult. Verifică ancora și follow-through-ul — și ai grijă să nu "peekuiești" înainte de eliberare completă.' },
+    { icon: '⚠️', tone: 'warn', text: 'Grupaj bun per total, cu câteva excepții — posibil grabă sau oboseală spre finalul seriei. Nu te lăsa, calitatea de bază e acolo!' },
+  ],
+  misses: [
+    { icon: '🎯', tone: 'warn', text: 'Rateu(ri) în serie — dacă a fost din grabă, ia-ți un moment în plus înainte de eliberare data viitoare.' },
+  ],
+  fallback: [
+    { icon: '👍', text: 'Serie solidă. Continuă tot așa!' },
+  ],
+};
+
+function pickTip(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function computeEndTip(arrows) {
+  if (!arrows || arrows.length < 2) return null;
+
+  const n = arrows.length;
+  const missCount = arrows.filter(a => a.score === 'M').length;
+  const lowCount = arrows.filter(a => a.score === '1' || a.score === '2').length;
+  const highCount = arrows.filter(a => a.score === 'X' || a.score === '10' || a.score === '9').length;
+  const badCount = missCount + lowCount;
+
+  // Serie mixta: cateva sageti foarte bune, dar si cateva foarte slabe/rateuri
+  if (badCount >= 1 && highCount >= 1 && badCount < n) {
+    return pickTip(badCount === 1 ? END_TIP_POOLS.mixedFlyerSingle : END_TIP_POOLS.mixedFlyerMultiple);
+  }
+  // Rateuri fara un grup bun care sa contrasteze
+  if (missCount >= 1 && highCount === 0) {
+    return pickTip(END_TIP_POOLS.misses);
+  }
+
+  // Analiza geometrica a grupajului (foloseste scor+ora, disponibile mereu
+  // — inclusiv in Mod grafic, unde se deriva automat ora din coordonate)
+  const withPosition = arrows.filter(a => a.score !== 'M' && a.position);
+  if (withPosition.length < 2) return pickTip(END_TIP_POOLS.fallback);
+
+  const pts = withPosition.map(a => arrowToXY(a.score, a.position));
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const spread = Math.sqrt(pts.reduce((s, p) => s + (p.x - cx) ** 2 + (p.y - cy) ** 2, 0) / pts.length);
+  const spreadX = Math.sqrt(pts.reduce((s, p) => s + (p.x - cx) ** 2, 0) / pts.length);
+  const spreadY = Math.sqrt(pts.reduce((s, p) => s + (p.y - cy) ** 2, 0) / pts.length);
+  const dist = Math.sqrt(cx * cx + cy * cy);
+  const angleDeg = (Math.atan2(cx, cy) * 180 / Math.PI + 360) % 360;
+  const hour = Math.round(angleDeg / 30) % 12 || 12;
+
+  const TIGHT = 1.5, LOOSE = 3, CENTERED = 1.0;
+
+  // Imprastiere puternic anizotropa (mult mai mult pe o axa) fara deplasare mare
+  if (dist < CENTERED * 1.5 && Math.max(spreadX, spreadY) > 1.8 * Math.max(Math.min(spreadX, spreadY), 0.3)) {
+    return pickTip(spreadX > spreadY ? END_TIP_POOLS.horizontalSpread : END_TIP_POOLS.verticalSpread);
+  }
+  if (spread < TIGHT && dist < CENTERED) {
+    return pickTip(END_TIP_POOLS.tightCentered);
+  }
+  const dir = END_TIP_DIRECTIONS[hour];
+  if (spread < TIGHT && dist >= CENTERED) {
+    return pickTip(END_TIP_POOLS.tightOffCenter(dir.label, dir.sight));
+  }
+  if (dist >= CENTERED && spread < LOOSE) {
+    return pickTip(END_TIP_POOLS.offCenterLoose(dir.label));
+  }
+  if (spread >= LOOSE) {
+    return pickTip(END_TIP_POOLS.looseGeneral);
+  }
+  return pickTip(END_TIP_POOLS.fallback);
+}
+
+function showEndTip(arrows) {
+  const tip = computeEndTip(arrows);
+  const card = document.getElementById('end-tip-card');
+  if (!tip || !card) { card?.classList.add('hidden'); return; }
+  document.getElementById('end-tip-icon').textContent = tip.icon;
+  document.getElementById('end-tip-text').textContent = tip.text;
+  card.className = 'end-tip-card' + (tip.tone ? ` tone-${tip.tone}` : '');
+}
+
+function dismissEndTip() {
+  document.getElementById('end-tip-card')?.classList.add('hidden');
 }
 
 function renderCentrajSection(session, containerId) {

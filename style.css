@@ -545,6 +545,43 @@ html, body {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+.end-tip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: var(--bg3);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.7rem 2rem 0.7rem 0.9rem;
+  margin: 0.6rem 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  position: relative;
+  animation: endTipIn .25s ease-out;
+}
+.end-tip-card.tone-good   { border-left-color: var(--accent3); }
+.end-tip-card.tone-warn   { border-left-color: var(--accent2); }
+.end-tip-icon { font-size: 1.1rem; flex-shrink: 0; line-height: 1.4; }
+.end-tip-text { flex: 1; }
+.end-tip-text strong { color: var(--text); }
+.end-tip-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.2rem;
+}
+.end-tip-close:hover { color: var(--text-muted); }
+@keyframes endTipIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .setup-steps { padding-left: 1.2rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
 .link { color: #4285F4; text-decoration: none; }
 .link:hover { text-decoration: underline; }
