@@ -546,40 +546,89 @@ html, body {
   color: var(--text-muted);
 }
 .end-tip-card {
+  position: fixed;
+  left: 50%;
+  top: 18%;
+  transform: translate(-50%, 0);
+  z-index: 1000;
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
+  width: min(90vw, 360px);
   background: var(--bg3);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius);
-  padding: 0.7rem 2rem 0.7rem 0.9rem;
-  margin: 0.6rem 0;
-  font-size: 0.82rem;
-  line-height: 1.4;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 2.2rem 0.9rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
   color: var(--text-muted);
-  position: relative;
-  animation: endTipIn .25s ease-out;
+  box-shadow: var(--shadow);
+  animation: endTipIn .3s cubic-bezier(.34,1.56,.64,1);
 }
+.end-tip-card.hidden { display: none; }
 .end-tip-card.tone-good   { border-left-color: var(--accent3); }
 .end-tip-card.tone-warn   { border-left-color: var(--accent2); }
-.end-tip-icon { font-size: 1.1rem; flex-shrink: 0; line-height: 1.4; }
+.end-tip-icon { font-size: 1.3rem; flex-shrink: 0; line-height: 1.45; }
 .end-tip-text { flex: 1; }
 .end-tip-text strong { color: var(--text); }
 .end-tip-close {
   position: absolute;
-  top: 0.4rem;
-  right: 0.5rem;
+  top: 0.5rem;
+  right: 0.6rem;
   background: none;
   border: none;
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   cursor: pointer;
   padding: 0.2rem;
 }
 .end-tip-close:hover { color: var(--text-muted); }
 @keyframes endTipIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translate(-50%, -10px) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+.end-tip-card.fade-out { animation: endTipOut .3s ease-in forwards; }
+@keyframes endTipOut {
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, -10px) scale(0.92); }
+}
+
+/* ── Confetti & artificii (realizari bune) ── */
+.fx-overlay {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 999;
+}
+@keyframes confetti-fall {
+  0%   { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(110vh) rotate(540deg); opacity: 0.3; }
+}
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 8px;
+  height: 14px;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+@keyframes firework-particle {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--fx), var(--fy)) scale(0.3); opacity: 0; }
+}
+.firework-burst { position: absolute; width: 0; height: 0; }
+.firework-particle {
+  position: absolute;
+  top: 0; left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  animation-name: firework-particle;
+  animation-timing-function: cubic-bezier(.15,.6,.4,1);
+  animation-fill-mode: forwards;
 }
 
 .setup-steps { padding-left: 1.2rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }

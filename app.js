@@ -1138,17 +1138,86 @@ function computeEndTip(arrows) {
   return pickTip(END_TIP_POOLS.fallback);
 }
 
+let endTipTimer = null;
+const END_TIP_AUTOHIDE_MS = 4500;
+
 function showEndTip(arrows) {
   const tip = computeEndTip(arrows);
   const card = document.getElementById('end-tip-card');
-  if (!tip || !card) { card?.classList.add('hidden'); return; }
+  if (!tip || !card) { dismissEndTip(); return; }
+
+  clearTimeout(endTipTimer);
   document.getElementById('end-tip-icon').textContent = tip.icon;
   document.getElementById('end-tip-text').textContent = tip.text;
   card.className = 'end-tip-card' + (tip.tone ? ` tone-${tip.tone}` : '');
+
+  if (tip.tone === 'good') {
+    launchConfetti();
+    launchFireworks();
+  }
+
+  endTipTimer = setTimeout(dismissEndTip, END_TIP_AUTOHIDE_MS);
 }
 
 function dismissEndTip() {
-  document.getElementById('end-tip-card')?.classList.add('hidden');
+  clearTimeout(endTipTimer);
+  const card = document.getElementById('end-tip-card');
+  if (!card || card.classList.contains('hidden')) return;
+  card.classList.add('fade-out');
+  setTimeout(() => card.classList.add('hidden'), 280);
+}
+
+// ── Efecte de sarbatoare (realizari bune) ───────────────────
+function launchConfetti() {
+  const overlay = document.createElement('div');
+  overlay.className = 'fx-overlay';
+  document.body.appendChild(overlay);
+  const colors = ['#e8c44a', '#3b82f6', '#27ae60', '#c0392b', '#ffffff'];
+  for (let i = 0; i < 60; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = `${Math.random() * 100}vw`;
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = `${(Math.random() * 0.4).toFixed(2)}s`;
+    piece.style.animationDuration = `${(1.8 + Math.random() * 1.2).toFixed(2)}s`;
+    overlay.appendChild(piece);
+  }
+  setTimeout(() => overlay.remove(), 3400);
+}
+
+function launchFireworks() {
+  const overlay = document.createElement('div');
+  overlay.className = 'fx-overlay';
+  document.body.appendChild(overlay);
+  const colors = ['#e8c44a', '#3b82f6', '#27ae60', '#c0392b', '#a855f7', '#ffffff'];
+
+  function burst(x, y, delay) {
+    setTimeout(() => {
+      const wrap = document.createElement('div');
+      wrap.className = 'firework-burst';
+      wrap.style.left = `${x}vw`;
+      wrap.style.top = `${y}vh`;
+      const n = 16;
+      for (let i = 0; i < n; i++) {
+        const angle = (i / n) * 2 * Math.PI;
+        const dist = 40 + Math.random() * 30;
+        const p = document.createElement('div');
+        p.className = 'firework-particle';
+        p.style.background = colors[Math.floor(Math.random() * colors.length)];
+        p.style.setProperty('--fx', `${Math.cos(angle) * dist}px`);
+        p.style.setProperty('--fy', `${Math.sin(angle) * dist}px`);
+        p.style.animationDuration = `${(0.7 + Math.random() * 0.3).toFixed(2)}s`;
+        wrap.appendChild(p);
+      }
+      overlay.appendChild(wrap);
+    }, delay);
+  }
+
+  burst(28 + Math.random() * 10, 25 + Math.random() * 10, 0);
+  burst(58 + Math.random() * 10, 20 + Math.random() * 10, 220);
+  burst(43 + Math.random() * 10, 32 + Math.random() * 10, 440);
+
+  setTimeout(() => overlay.remove(), 1800);
 }
 
 function renderCentrajSection(session, containerId) {
